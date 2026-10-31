@@ -1,0 +1,35 @@
+.app{min-height:100dvh;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);
+  background:radial-gradient(ellipse 80% 45% at 50% 82%,rgba(212,175,55,.12),transparent 70%),#000}
+main{flex:1;padding:var(--sp-4) var(--sp-3) calc(84px + env(safe-area-inset-bottom,0px));max-width:560px;width:100%;margin:0 auto}
+.muted{color:var(--muted)}
+.panel{padding-top:var(--sp-4)}
+
+.home{display:flex;flex-direction:column;align-items:center;text-align:center}
+.hero-top{margin-top:var(--sp-3)}
+.hero-label{margin:0;color:var(--muted);font-size:var(--fs-sm)}
+.hero-num{margin:0;font:600 4.5rem/1.1 var(--font-display);color:var(--ivory);text-shadow:0 0 24px rgba(240,215,140,.25)}
+.hero-sub{margin:0;color:var(--gold-light)}
+.funnel{width:100%;height:auto;max-height:58dvh;display:block;margin:var(--sp-2) 0}
+.you-label{fill:var(--ivory);font:600 17px var(--font-body)}
+.hero-foot p{color:var(--muted);font-size:var(--fs-sm);margin:0 0 var(--sp-3)}
+.dot-gold{fill:#fff1c9}
+.dot-unknown{fill:var(--bg);stroke:var(--unknown);stroke-width:1.2}
+.tree-line.draw{stroke-dasharray:1;stroke-dashoffset:0;animation:draw 1.3s cubic-bezier(.4,0,.2,1) backwards}
+@keyframes draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+.tree-line.placeholder{stroke-dasharray:5 5}
+
+.steps{list-style:none;margin:var(--sp-4) 0 0;padding:0;display:grid;gap:var(--sp-2)}
+.steps li{display:flex;align-items:center;gap:var(--sp-3);padding:12px 16px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-md);color:var(--muted)}
+.steps li.done{color:var(--ivory);border-color:var(--gold-deep)}
+.mark{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:var(--fs-xs);
+  border:1px solid var(--line)}
+.done .mark{background:var(--gold);color:#000;border-color:var(--gold)}
+
+.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-around;
+  padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));background:rgba(0,0,0,.88);
+  backdrop-filter:blur(10px);border-top:1px solid var(--line)}
+.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;
+  color:var(--muted);font:var(--fs-xs) var(--font-body);padding:6px 0;cursor:pointer}
+.tabbar button.active{color:var(--gold-light)}
+.tabbar button.active svg{filter:drop-shadow(0 0 6px rgba(212,175,55,.8))}
