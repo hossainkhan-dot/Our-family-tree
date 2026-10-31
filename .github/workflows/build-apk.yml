@@ -17,7 +17,7 @@ jobs:
       - run: npx cap sync android
       - run: cd android && ./gradlew assembleRelease
       - name: Sign with permanent key
-        env: { KS_PASS: "${{ secrets.KEYSTORE_PASSWORD }}" }
+        env: { KS_PASS: "c47cc58ee5746c0d842084fc85f06f3a" }
         run: |
           APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | sort -V | tail -1)
           $APKSIGNER sign --ks signing/release.keystore --ks-key-alias familytree \
