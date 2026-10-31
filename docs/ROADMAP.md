@@ -15,3 +15,9 @@ Rule: কোড পাবলিক হতে পারে, আসল পার�
 - [ ] ধাপ ১০ – Legacy Transfer, Time Capsule, Knowledge AI, Cinematic View
 
 অগ্রগতি: ২/১০
+- [x] APK বিল্ড: GitHub Actions → Artifacts → family-tree-apk
+
+## আপডেট নিয়ম (গুরুত্বপূর্ণ)
+- signing/release.keystore স্থায়ী চাবি। এটি ও পাসওয়ার্ড (GitHub Secret: KEYSTORE_PASSWORD) আলাদা জায়গায় ব্যাকআপ রাখুন। হারালে পরের APK পুরোনোটির ওপর ইনস্টল হবে না।
+- প্রতিটি বিল্ডে versionCode বাড়ে, তাই আনইনস্টল ছাড়াই আপডেট হয়।
+- প্রতিবার জিপের নামে নতুন সংস্করণ (-v3, -v4...)।
