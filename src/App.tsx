@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Funnel from "./components/Funnel";
+import TreeScreen from "./components/TreeView";
 import "./app.css";
 
 type Tab = "home" | "tree" | "people" | "progress";
@@ -21,7 +22,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 const STEPS: [boolean, string][] = [
   [true, "ভিত্তি ও GitHub বিল্ড"], [true, "ডিজাইন সিস্টেম"], [true, "ডেটাবেস স্কিমা"],
-  [false, "সম্পর্কের লজিক"], [false, "প্রোফাইল ও ফর্ম"], [false, "ট্রি ভিউ"],
+  [true, "সম্পর্কের লজিক"], [false, "প্রোফাইল ও ফর্ম"], [false, "ট্রি ভিউ"],
   [false, "লগইন, Role ও অনুমোদন"], [false, "ব্যাকআপ ও GEDCOM"],
   [false, "মিডিয়া, টাইমলাইন, ম্যাপ, সার্চ"], [false, "Legacy Transfer, Time Capsule, AI"],
 ];
@@ -83,7 +84,7 @@ export default function App() {
     <div className="app">
       <main>
         {tab === "home" && <Home />}
-        {tab === "tree" && <Soon title="বংশবৃক্ষ" step={6} text="ওপর থেকে নিচে নেমে আসা সোনালি আলোর রেখায় পুরো বংশ দেখা যাবে। জুম, টেনে সরানো, শাখা খোলা-বন্ধ থাকবে।" />}
+        {tab === "tree" && <TreeScreen />}
         {tab === "people" && <Soon title="সদস্য" step={5} text="প্রতিটি সদস্যের পূর্ণ প্রোফাইল, ছবি, দলিল ও উৎসসহ তথ্য এখানে যোগ ও দেখা যাবে।" />}
         {tab === "progress" && <Progress />}
       </main>
