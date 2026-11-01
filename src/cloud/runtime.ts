@@ -1,3 +1,4 @@
+import { idbMediaStore } from "../db/mediaStore";
 import { putSnapshot } from "../db/snapshots";
 import type { Sql } from "../db/sql";
 import { backupToDrive, type DriveBackupResult } from "./driveBackup";
@@ -61,7 +62,7 @@ async function ctx(db: Sql): Promise<Ctx & { sub: string; name: string | null }>
   if (!o) throw new CloudError("revoked", "আগে Google ও Drive-এ লগইন করুন।");
   await o.tok.checkPermission();      // প্রতিটি সুরক্ষিত কাজের আগে অনুমতি যাচাই
   const cfg = await loadConfig();
-  return { db, drive: o.drive, store: syncStore, device: cfg.deviceId, email: o.session.email, sub: o.session.sub, name: o.session.name,
+  return { media: idbMediaStore, db, drive: o.drive, store: syncStore, device: cfg.deviceId, email: o.session.email, sub: o.session.sub, name: o.session.name,
     beforeReplace: async () => { await putSnapshot(db, `pre-${new Date().toISOString().replace(/[:.]/g, "-")}`); } };
 }
 const guard = async <T>(fn: () => Promise<T>): Promise<T> => {
@@ -78,7 +79,7 @@ export async function runDriveBackup(db: Sql, which: Which): Promise<DriveBackup
     if (!o) throw new CloudError("revoked", which === "primary" ? "আগে Google Drive-এ লগইন করুন।" : "আগে দ্বিতীয় Drive অ্যাকাউন্ট যুক্ত করুন।");
     await o.tok.checkPermission();
     const cfg = await loadConfig();
-    const r = await backupToDrive(db, o.drive, { partMb: cfg.partMb, keepDays: cfg.keepDays, kind: which === "primary" ? "drive" : "mirror", ...(which === "mirror" ? { rootName: "Our_Family_Archive_Mirror" } : {}) });
+    const r = await backupToDrive(db, o.drive, { partMb: cfg.partMb, keepDays: cfg.keepDays, kind: which === "primary" ? "drive" : "mirror", media: idbMediaStore, ...(which === "mirror" ? { rootName: "Our_Family_Archive_Mirror" } : {}) });
     await saveConfig(which === "primary" ? { lastDriveBackup: r.at } : { lastMirrorBackup: r.at });
     return r;
   });

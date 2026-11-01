@@ -1,3 +1,4 @@
+import type { MediaStore } from "../db/media";
 import { addLog, buildPackage, type BuiltPackage } from "../db/package";
 import { joinParts, manifestName, parsePartsManifest, partIndex, splitPackage, type Part } from "../db/split";
 import { sha256Hex } from "../db/zip";
@@ -27,8 +28,8 @@ export function retention(bases: string[], today: string, keepDays = 30): { keep
 
 export interface DriveBackupResult { base: string; files: string[]; sha256: string; people: number; at: string; removed: string[] }
 /** ZIP ব্যাকআপ বানিয়ে (ইচ্ছা হলে partMb আকারে ভাগ করে) Drive-এর Backups ফোল্ডারে রাখে, প্রতিটি অংশ ফেরত নামিয়ে SHA-256 মিলিয়ে দেখে। */
-export async function backupToDrive(db: Sql, drive: DriveClient, o: { partMb: number; layout?: Layout; kind?: "drive" | "mirror"; keepDays?: number; rootName?: string; today?: string }): Promise<DriveBackupResult> {
-  const pkg: BuiltPackage = await buildPackage(db);
+export async function backupToDrive(db: Sql, drive: DriveClient, o: { partMb: number; layout?: Layout; kind?: "drive" | "mirror"; keepDays?: number; rootName?: string; today?: string; media?: MediaStore }): Promise<DriveBackupResult> {
+  const pkg: BuiltPackage = await buildPackage(db, o.media);
   const layout = o.layout ?? (await ensureLayout(drive, o.rootName, ["Backups"]));
   const folder = layout.folders.Backups;
   const sp = await splitPackage(pkg.filename, pkg.bytes, Math.round((o.partMb || 0) * MB), pkg.at);

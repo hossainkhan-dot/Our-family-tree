@@ -34,7 +34,7 @@ const STEPS: [boolean, string][] = [
   [true, "ভিত্তি ও GitHub বিল্ড"], [true, "ডিজাইন সিস্টেম"], [true, "ডেটাবেস স্কিমা"],
   [true, "সম্পর্কের লজিক"], [true, "প্রোফাইল ও ফর্ম"], [true, "ট্রি ভিউ"],
   [true, "লগইন (Google), Role ও অনুমোদন"], [true, "ব্যাকআপ, GEDCOM ও Google Drive সিঙ্ক"],
-  [false, "মিডিয়া, টাইমলাইন, ম্যাপ, সার্চ"], [false, "Legacy Transfer, Time Capsule, AI"],
+  [true, "মিডিয়া, টাইমলাইন, ম্যাপ, সার্চ, ড্যাশবোর্ড"], [false, "Legacy Transfer, Time Capsule, AI"],
 ];
 
 function Home({ onAdd, onBackup }: { onAdd: () => void; onBackup: () => void }) {
@@ -156,7 +156,7 @@ export default function App() {
         {tab === "tree" && <TreeScreen onAdd={() => go({ mode: "form" })} onOpenProfile={(id) => go({ mode: "profile", id })} />}
         {tab === "people" && <People view={pv} setView={go} />}
         {tab === "backup" && <Backup />}
-        {tab === "more" && <Manage progress={<Progress />} />}
+        {tab === "more" && <Manage progress={<Progress />} onOpenProfile={(id) => go({ mode: "profile", id })} />}
       </main>
       {toast && <div className="toast" role="status">{toast}</div>}
       <nav className="tabbar" aria-label="প্রধান মেনু">

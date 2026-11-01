@@ -1,5 +1,7 @@
 import { APP, exportBackup, parseBackup, serializeBackup, summarize, type Backup } from "./backup";
 import { exportGedcom } from "./gedcom";
+import { allMediaRows } from "./media_rows";
+import type { MediaStore } from "./media";
 import { getMeta, setMeta } from "./repo";
 import type { Sql } from "./sql";
 import { isZip, sha256Hex, zipRead, zipWrite } from "./zip";
@@ -10,7 +12,7 @@ export interface Manifest {
   app: string; kind: "backup-package"; format: number; created_at: string; schema: number;
   people: number; counts: Record<string, number>; files: { name: string; size: number; sha256: string }[];
 }
-export interface BuiltPackage { filename: string; bytes: Uint8Array; sha256: string; people: number; at: string }
+export interface BuiltPackage { filename: string; bytes: Uint8Array; sha256: string; people: number; at: string; media: number; mediaMissing: number }
 
 const README = (m: { at: string; people: number }) => `Family Legacy Archive - Backup Package
 =====================================
@@ -22,6 +24,7 @@ EN: This is a complete backup. It is a plain ZIP; any tool can open it.
 Files
   data.json         Complete data (all tables, sources, full change history). Open standard JSON, UTF-8.
   family-tree.ged   Same tree in GEDCOM 5.5.1, readable by any genealogy software.
+  media/<sha256>    Original photos/documents; the name is the SHA-256 of the file. data.json (table "media") says which person each belongs to and the original file name.
   manifest.json     Description and SHA-256 checksum of every file.
   SHA256SUMS.txt    Checksums in standard format. Verify with:  sha256sum -c SHA256SUMS.txt
 
@@ -29,13 +32,21 @@ Restore: open the app > Backup > pick this ZIP. The app checks every checksum be
 Without the app: data.json and family-tree.ged are ordinary text files and can be read directly.
 `;
 
-export async function buildPackage(db: Sql): Promise<BuiltPackage> {
+export async function buildPackage(db: Sql, store?: MediaStore): Promise<BuiltPackage> {
   const b = exportBackup(db), s = summarize(b);
-  const body = [
+  const body: { name: string; data: Uint8Array }[] = [
     { name: "data.json", data: enc.encode(serializeBackup(b)) },
     { name: "family-tree.ged", data: enc.encode(exportGedcom(db)) },
     { name: "README.txt", data: enc.encode(README({ at: b.exported_at, people: s.people })) },
   ];
+  let mediaMissing = 0, mediaCount = 0;
+  if (store) {
+    for (const sha of allMediaRows(db)) {
+      const bytes = await store.get(sha);
+      if (!bytes || (await sha256Hex(bytes)) !== sha) { mediaMissing++; continue; }   // এই ফোনে নেই বা নষ্ট: ভুল ফাইল ঢোকানো হয় না
+      body.push({ name: `media/${sha}`, data: bytes }); mediaCount++;
+    }
+  }
   const files: Manifest["files"] = [];
   for (const f of body) files.push({ name: f.name, size: f.data.length, sha256: await sha256Hex(f.data) });
   const manifest: Manifest = { app: APP, kind: "backup-package", format: PACKAGE_FORMAT, created_at: b.exported_at, schema: b.schema, people: s.people, counts: b.counts, files };
@@ -45,10 +56,10 @@ export async function buildPackage(db: Sql): Promise<BuiltPackage> {
     ...body,
     { name: "SHA256SUMS.txt", data: enc.encode(sums) },
   ], new Date(b.exported_at));
-  return { filename: `family-backup-${b.exported_at.slice(0, 10)}.zip`, bytes, sha256: await sha256Hex(bytes), people: s.people, at: b.exported_at };
+  return { filename: `family-backup-${b.exported_at.slice(0, 10)}.zip`, bytes, sha256: await sha256Hex(bytes), people: s.people, at: b.exported_at, media: mediaCount, mediaMissing };
 }
 
-export interface ReadPackage { backup: Backup; manifest: Manifest; checked: number }
+export interface ReadPackage { backup: Backup; manifest: Manifest; checked: number; media: Map<string, Uint8Array> }
 /** Verifies EVERY checksum and record count first; only then returns the data. Throws a Bangla message on any mismatch. */
 export async function readPackage(bytes: Uint8Array): Promise<ReadPackage> {
   if (!isZip(bytes)) throw new Error("এটি ZIP ফাইল নয়।");
@@ -68,7 +79,9 @@ export async function readPackage(bytes: Uint8Array): Promise<ReadPackage> {
   if (!data || !m.files.some((f) => f.name === "data.json")) throw new Error("প্যাকেজে data.json নেই।");
   const backup = parseBackup(dec.decode(data));
   for (const [t, n] of Object.entries(m.counts ?? {})) if ((backup.tables[t]?.length ?? 0) !== n) throw new Error(`তথ্যের সংখ্যা মেলেনি (${t})।`);
-  return { backup, manifest: m, checked: m.files.length };
+  const media = new Map<string, Uint8Array>();
+  for (const f of m.files) if (f.name.startsWith("media/")) media.set(f.name.slice(6), z.get(f.name)!);
+  return { backup, manifest: m, checked: m.files.length, media };
 }
 
 export interface LogEntry { at: string; kind: "zip" | "json" | "ged" | "drive" | "mirror"; file: string; sha256?: string; people: number }

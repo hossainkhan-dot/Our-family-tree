@@ -62,7 +62,7 @@ export async function zipRead(b: Uint8Array): Promise<Map<string, Uint8Array>> {
   if (eocd < 0) throw new Error(BAD);
   const n = v.getUint16(eocd + 10, true), cdSize = v.getUint32(eocd + 12, true);
   let p = v.getUint32(eocd + 16, true);
-  if (n > 1000 || p + cdSize > b.length) throw new Error(BAD);
+  if (n > 20000 || p + cdSize > b.length) throw new Error(BAD);
   const out = new Map<string, Uint8Array>();
   for (let i = 0; i < n; i++) {
     if (p + 46 > b.length || v.getUint32(p, true) !== 0x02014b50) throw new Error(BAD);

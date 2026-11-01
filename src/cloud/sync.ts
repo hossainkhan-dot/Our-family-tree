@@ -1,4 +1,5 @@
 import { activateOnSignIn, ensureOwner } from "../db/access";
+import { allMedia, type MediaStore } from "../db/media";
 import { APP, exportBackup, parseBackup, serializeBackup, type Backup } from "../db/backup";
 import { replaceWith } from "../db/replace";
 import { uid } from "../db/repo";
@@ -22,7 +23,7 @@ export interface FamilyManifest {
 }
 export interface SyncState { familyId: string; baseRevision: number; baseFp: string; lastSyncAt: string | null; lastLogId: number; conflict: { remoteRevision: number; at: string } | null }
 export interface StateStore { load(): Promise<SyncState | null>; save(s: SyncState): Promise<void> }
-export interface Ctx { db: Sql; drive: DriveClient; store: StateStore; device: string; email: string; beforeReplace?: () => Promise<void>; now?: () => Date }
+export interface Ctx { media?: MediaStore; db: Sql; drive: DriveClient; store: StateStore; device: string; email: string; beforeReplace?: () => Promise<void>; now?: () => Date }
 export type SyncResult = { status: "uptodate" | "pushed" | "pulled" | "initialized"; revision: number } | { status: "conflict"; remoteRevision: number };
 
 export async function ensureLayout(d: DriveClient, rootName = ROOT_NAME, only: readonly Sub[] = SUBFOLDERS): Promise<Layout> {
@@ -113,6 +114,29 @@ const hasData = (db: Sql) => db.all("SELECT 1 AS x FROM person LIMIT 1").length 
 
 /** মূল সিঙ্ক: Drive-এ নতুন কিছু থাকলে নামায়, শুধু এখানে বদলালে ওঠায়, দুই দিকেই বদলালে "দ্বন্দ্ব" জানায় — কিছুই নীরবে ওভাররাইট হয় না। */
 export async function syncNow(c: Ctx): Promise<SyncResult> {
+  const r = await syncCore(c);
+  if (r.status !== "conflict" && c.media) await syncMedia(c);
+  return r;
+}
+
+/** ছবি/ফাইল: Drive-এর Photos/ ফোল্ডারে SHA-256 নামে। যেটা Drive-এ নেই সেটা ওঠে, যেটা এই ফোনে নেই সেটা নামে (নামানোর পর SHA-256 মেলানো হয়)। */
+export async function syncMedia(c: Ctx): Promise<{ up: number; down: number; missing: number }> {
+  const store = c.media!, l = await ensureLayout(c.drive, ROOT_NAME, ["Photos"]);
+  const remote = new Map((await c.drive.children(l.folders.Photos)).map((f) => [f.name, f]));
+  let up = 0, down = 0, missing = 0;
+  for (const m of allMedia(c.db)) {
+    const r = remote.get(m.sha256), local = await store.get(m.sha256);
+    if (local && !r) { await c.drive.put({ name: m.sha256, parent: l.folders.Photos, bytes: local, mime: m.mime_type ?? "application/octet-stream", props: { sha256: m.sha256 } }); up++; }
+    else if (!local && r) {
+      const bytes = await c.drive.download(r.id);
+      if ((await sha256Hex(bytes)) !== m.sha256) throw new CloudError("server", "Drive-এর একটি ছবি নষ্ট (SHA-256 মেলেনি); সেটি বসানো হয়নি।");
+      await store.put(m.sha256, bytes); down++;
+    } else if (!local && !r) missing++;
+  }
+  return { up, down, missing };
+}
+
+async function syncCore(c: Ctx): Promise<SyncResult> {
   const l = await ensureLayout(c.drive);
   const remote = await readManifest(c.drive, l), st = await c.store.load();
   if (!remote) return push(c, l, null, st, (st?.baseRevision ?? 0) + 1, st?.familyId ?? uid());

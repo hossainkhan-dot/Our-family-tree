@@ -9,6 +9,7 @@ import { loadData } from "../db/repo";
 import { saveOrShare, saveOrShareMany } from "../db/share";
 import { joinParts, parsePartsManifest, partIndex, splitPackage, type Part } from "../db/split";
 import { loadConfig } from "../cloud/store";
+import { idbMediaStore } from "../db/mediaStore";
 import CloudPanel from "./CloudPanel";
 import { isZip } from "../db/zip";
 import { useBack } from "../core/back";
@@ -17,7 +18,7 @@ import { listSnapshots, putSnapshot, snapshotBackup, type Snapshot } from "../db
 const day = () => new Date().toISOString().slice(0, 10);
 const when = (iso: string) => new Date(iso).toLocaleString("bn-BD", { dateStyle: "medium", timeStyle: "short" });
 
-type Pending = { kind: "restore"; b: B; name: string; note?: string } | { kind: "gedcom"; text: string; name: string; count: number };
+type Pending = { kind: "restore"; b: B; name: string; note?: string; media?: Map<string, Uint8Array> } | { kind: "gedcom"; text: string; name: string; count: number };
 
 export default function Backup() {
   const { db, data, reload } = useDb();
@@ -37,12 +38,12 @@ export default function Backup() {
   };
 
   const exportZip = () => run(async () => {
-    const p = await buildPackage(db), cfg = await loadConfig();
+    const p = await buildPackage(db, idbMediaStore), cfg = await loadConfig();
     const sp = await splitPackage(p.filename, p.bytes, Math.round(cfg.partMb * 1024 * 1024), p.at);
     const out = [...sp.parts, ...(sp.manifestFile ? [sp.manifestFile] : [])];
     await saveOrShareMany(out, "application/zip");
     addLog(db, { at: p.at, kind: "zip", file: sp.parts.length > 1 ? `${p.filename} (${sp.parts.length} অংশ)` : p.filename, sha256: p.sha256, people: p.people }); reload();
-    return `ZIP ব্যাকআপ তৈরি হয়েছে (${toBn(p.people)} জন সদস্য${sp.parts.length > 1 ? `, ${toBn(sp.parts.length)}টি অংশে ভাগ করা` : ""})। ফাইল${sp.parts.length > 1 ? "গুলো" : "টি"} Google Drive-এ (যেকোনো অ্যাকাউন্টে), পেনড্রাইভে বা নিরাপদ জায়গায় রাখুন।\nচেকসাম (SHA-256): ${p.sha256}`;
+    return `ZIP ব্যাকআপ তৈরি হয়েছে (${toBn(p.people)} জন সদস্য${p.media ? `, ${toBn(p.media)}টি ছবি/ফাইলসহ` : ""}${sp.parts.length > 1 ? `, ${toBn(sp.parts.length)}টি অংশে ভাগ করা` : ""})।${p.mediaMissing ? `\nসতর্কতা: ${toBn(p.mediaMissing)}টি ছবি এই ফোনে নেই, তাই ব্যাকআপে ঢোকেনি।` : ""} ফাইল${sp.parts.length > 1 ? "গুলো" : "টি"} Google Drive-এ (যেকোনো অ্যাকাউন্টে), পেনড্রাইভে বা নিরাপদ জায়গায় রাখুন।\nচেকসাম (SHA-256): ${p.sha256}`;
   });
   const exportJson = () => run(async () => {
     const b = exportBackup(db), text = serializeBackup(b);
@@ -58,7 +59,7 @@ export default function Backup() {
 
   const openZip = async (name: string, bytes: Uint8Array, note?: string) => {
     const r = await readPackage(bytes);
-    setPending({ kind: "restore", b: r.backup, name, note: note ?? `✔ যাচাই সম্পন্ন: ${toBn(r.checked)}টি ফাইলের SHA-256 মিলেছে, কিছু বদলায়নি।` });
+    setPending({ kind: "restore", b: r.backup, name, media: r.media, note: note ?? `✔ যাচাই সম্পন্ন: ${toBn(r.checked)}টি ফাইলের SHA-256 মিলেছে, কিছু বদলায়নি।` });
   };
   /** একাধিক অংশ (.zip.001, .002 ... ও .parts.json) একসঙ্গে বেছে নিলে জোড়া লাগিয়ে যাচাই করে। */
   const pickParts = (fs: FileList | null) => {
@@ -91,14 +92,15 @@ export default function Backup() {
     });
   };
 
-  const restore = (b: B) => run(async () => {
+  const restore = (b: B, media?: Map<string, Uint8Array>) => run(async () => {
     if (!db.reset) throw new Error("এই পরিবেশে ফিরিয়ে আনা সম্ভব নয়।");
     await putSnapshot(db, `pre-${new Date().toISOString().replace(/[:.]/g, "-")}`);   // safety copy of what is there now
     const before = exportBackup(db);
     try { db.reset(); restoreInto(db, b); }
     catch (e) { db.reset(); restoreInto(db, before); reload(); throw new Error(`ফিরিয়ে আনা যায়নি, আগের তথ্য যেমন ছিল তেমনই আছে। (${e instanceof Error ? e.message : e})`); }
+    for (const [sha, bytes] of media ?? []) await idbMediaStore.put(sha, bytes);
     reload(); setPending(null);
-    return `সফলভাবে ফিরিয়ে আনা হয়েছে: ${toBn(summarize(b).people)} জন সদস্য।`;
+    return `সফলভাবে ফিরিয়ে আনা হয়েছে: ${toBn(summarize(b).people)} জন সদস্য${media?.size ? `, ${toBn(media.size)}টি ছবি/ফাইল` : ""}।`;
   });
 
   const importGed = (p: Extract<Pending, { kind: "gedcom" }>) => run(async () => {
@@ -137,7 +139,7 @@ export default function Backup() {
           <p><b>{pending.name}</b><br />{toBn(summarize(pending.b).people)} জন সদস্য · {when(pending.b.exported_at)}</p>
           {pending.note && <p className="notice">{pending.note}</p>}
           <p className="muted">এটি ফিরিয়ে আনলে বর্তমান সব তথ্য এই ফাইলের তথ্য দিয়ে বদলে যাবে। বদলানোর আগে বর্তমান তথ্যের একটি কপি অ্যাপের ভেতরে রাখা হবে।</p>
-          <div className="row"><button className="btn danger" disabled={busy} onClick={() => restore(pending.b)}>হ্যাঁ, ফিরিয়ে আনুন</button><button className="btn" onClick={() => setPending(null)}>বাতিল</button></div>
+          <div className="row"><button className="btn danger" disabled={busy} onClick={() => restore(pending.b, pending.media)}>হ্যাঁ, ফিরিয়ে আনুন</button><button className="btn" onClick={() => setPending(null)}>বাতিল</button></div>
         </div>
       )}
       {pending?.kind === "gedcom" && (

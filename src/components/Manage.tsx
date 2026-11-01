@@ -3,14 +3,15 @@ import { toBn } from "../core/relations";
 import * as A from "../db/access";
 import { useDb } from "../db/DbContext";
 import { explainError } from "../db/repo";
+import Explore from "./Explore";
 
-type Sec = "members" | "approvals" | "history" | "progress";
+type Sec = "explore" | "members" | "approvals" | "history" | "progress";
 const when = (iso: string) => new Date(iso).toLocaleString("bn-BD", { dateStyle: "medium", timeStyle: "short" });
 const REQ_BN: Record<string, string> = { applied: "প্রয়োগ হয়েছে", rejected: "প্রত্যাখ্যাত", failed: "প্রয়োগ হয়নি", cancelled: "বাতিল" };
 
-export default function Manage({ progress }: { progress: ReactNode }) {
+export default function Manage({ progress, onOpenProfile }: { progress: ReactNode; onOpenProfile: (id: string) => void }) {
   const { db, reload } = useDb();
-  const [sec, setSec] = useState<Sec>("members");
+  const [sec, setSec] = useState<Sec>("explore");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [, tick] = useState(0);
   const me = A.currentMember(db);
@@ -23,11 +24,12 @@ export default function Manage({ progress }: { progress: ReactNode }) {
     <section className="panel">
       <h1>আরও</h1>
       <div className="chips" role="tablist">
-        {([["members", "সদস্য ও Role"], ["approvals", "অনুমোদন"], ["history", "History"], ["progress", "অগ্রগতি"]] as [Sec, string][]).map(([k, l]) => (
+        {([["explore", "অন্বেষণ"], ["members", "সদস্য ও Role"], ["approvals", "অনুমোদন"], ["history", "History"], ["progress", "অগ্রগতি"]] as [Sec, string][]).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={sec === k} className={sec === k ? "on" : ""} onClick={() => { setSec(k); setMsg(null); }}>{l}</button>
         ))}
       </div>
       {msg && <p className={msg.ok ? "notice" : "error"} role="status">{msg.text}</p>}
+      {sec === "explore" && <Explore onOpenProfile={onOpenProfile} />}
       {sec === "members" && <Members me={me} act={act} />}
       {sec === "approvals" && <Approvals me={me} act={act} />}
       {sec === "history" && <History />}

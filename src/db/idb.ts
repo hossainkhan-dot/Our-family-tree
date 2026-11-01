@@ -1,11 +1,11 @@
 export const IDB_NAME = "family-legacy-archive";
-export const FILES = "files", SNAPS = "snapshots";
+export const FILES = "files", SNAPS = "snapshots", MEDIA = "media";
 
 export function idb(): Promise<IDBDatabase> {
   return new Promise((res, rej) => {
-    const r = indexedDB.open(IDB_NAME, 2);
+    const r = indexedDB.open(IDB_NAME, 3);
     r.onupgradeneeded = () => {
-      for (const s of [FILES, SNAPS]) if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s);
+      for (const s of [FILES, SNAPS, MEDIA]) if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s);
     };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);

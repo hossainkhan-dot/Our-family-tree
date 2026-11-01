@@ -1,3 +1,4 @@
+import MediaSection from "./MediaSection";
 import { useMemo, useState } from "react";
 import { buildGraph, focusSet, relation, toBn, type P } from "../core/relations";
 import { useDb } from "../db/DbContext";
@@ -89,6 +90,7 @@ function Profile({ id, setView }: { id: string; setView: (v: PeopleView) => void
       {rows([["শিক্ষা", p.education ?? ""], ["প্রতিষ্ঠান", p.institution ?? ""], ["পেশা", p.occupation ?? ""], ["কর্মস্থল", p.workplace ?? ""], ["অর্জন", p.achievements ?? ""]])}
       <h2>ব্যক্তিগত ইতিহাস</h2>
       {rows([["জীবনী", p.biography ?? ""], ["স্বভাব", p.personality ?? ""], ["স্মৃতি", p.memories ?? ""]])}
+      <MediaSection personId={id} />
       <h2>উৎস</h2>
       {p.sources.length ? <ul className="sources">{p.sources.map((s, i) => <li key={i}>{s.title}{s.informant ? ` · ${s.informant}` : ""}</li>)}</ul> : <p className="muted">কোনো উৎস যোগ করা হয়নি।</p>}
       <div className="row actions">
