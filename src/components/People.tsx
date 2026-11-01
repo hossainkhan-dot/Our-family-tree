@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { buildGraph, focusSet, relation, toBn, type P } from "../core/relations";
 import { useDb } from "../db/DbContext";
-import { deletePerson, formatDate, getProfile, setEgo } from "../db/repo";
+import { currentMember, submitChange } from "../db/access";
+import { explainError, formatDate, getProfile, setEgo } from "../db/repo";
 import PersonForm from "./PersonForm";
 import { useBack } from "../core/back";
 
@@ -94,7 +95,14 @@ function Profile({ id, setView }: { id: string; setView: (v: PeopleView) => void
         <button className="btn btn-primary" onClick={() => setView({ mode: "form", id })}>সম্পাদনা</button>
         {id !== ego && <button className="btn" onClick={() => { setEgo(db, id); reload(); }}>এটি আমি</button>}
         {!confirm ? <button className="btn danger" onClick={() => setConfirm(true)}>মুছুন</button>
-          : <button className="btn danger" onClick={() => { deletePerson(db, id); reload(); setView({ mode: "list" }); }}>নিশ্চিত, মুছুন</button>}
+          : <button className="btn danger" onClick={() => {
+            try {
+              const o = submitChange(db, currentMember(db), { kind: "delete_person", id, name: p.nameBn || p.nameEn || "নামহীন" });
+              reload();
+              if (!o.applied) window.alert("মুছে ফেলার অনুরোধ অনুমোদনের জন্য জমা হয়েছে।");
+              setView({ mode: "list" });
+            } catch (e) { window.alert(explainError(e)); }
+          }}>নিশ্চিত, মুছুন</button>}
       </div>
       {confirm && <p className="muted">মুছলে সদস্য তালিকা ও ট্রি থেকে সরে যাবে, তবে History-তে সংরক্ষিত থাকবে।</p>}
     </section>

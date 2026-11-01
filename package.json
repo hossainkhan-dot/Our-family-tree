@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "for t in relations repo backup package relations_add; do node --import ./tests/register.mjs --experimental-strip-types tests/$t.test.ts || exit 1; done"
+    "test": "for t in relations repo backup package relations_add access; do node --import ./tests/register.mjs --experimental-strip-types tests/$t.test.ts || exit 1; done"
   },
   "dependencies": {
     "react": "^18.3.1",

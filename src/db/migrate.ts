@@ -1,11 +1,12 @@
 import m001 from "./migrations/001_core.sql?raw";
+import m002 from "./migrations/002_access.sql?raw";
 
 import type { Sql } from "./sql";
 
 export interface Migration { version: number; name: string; sql: string }
 
 /** Append new migrations to the END of this list. Never edit an applied one. */
-export const MIGRATIONS: Migration[] = [{ version: 1, name: "core", sql: m001 }];
+export const MIGRATIONS: Migration[] = [{ version: 1, name: "core", sql: m001 }, { version: 2, name: "access", sql: m002 }];
 
 export function migrate(db: Sql): number {
   db.run("PRAGMA foreign_keys = ON");

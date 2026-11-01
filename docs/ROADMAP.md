@@ -10,6 +10,8 @@ Rule: কোড পাবলিক হতে পারে, আসল পার�
 - [x] ধাপ ৫ – প্রোফাইল ও ফর্ম (src/db/repo.ts + sql.js + IndexedDB; src/components/PersonForm.tsx, People.tsx; repo টেস্ট পাস)
 - [x] ধাপ ৬ – ট্রি ভিউ (ফোকাস ক্যানভাস, জুম/পান, silhouette; আসল ডেটায় সংযুক্ত। বাকি: Expand/Collapse, Compact/Portrait/Cinematic মোড)
 - [ ] ধাপ ৭ – Google লগইন, Role, ২–৩ জনের অনুমোদন, History
+  - [x] ৭ক – Role, সদস্য-তালিকা, ২/৩ জনের অনুমোদন (ডেটাবেস ট্রিগারে), History স্ক্রিন; tests/access.test.ts পাস
+  - [ ] ৭খ – Google Sign-In (OAuth Client ID লাগবে) ও সদস্য যাচাই
 - [x] ধাপ ৮ – ব্যাকআপ, JSON/GEDCOM 5.5.1, Restore (src/db/backup.ts, gedcom.ts, snapshots.ts, components/Backup.tsx; tests/backup.test.ts পাস)
   - [x] ৮ক – ZIP ব্যাকআপ প্যাকেজ (data.json + GEDCOM + README + SHA-256 চেকসাম, src/db/zip.ts, package.ts), যাচাইসহ Restore, ব্যাকআপের খাতা; tests/package.test.ts পাস
   - [x] ৫ক – সম্পর্ক বাছাই (বাবা, মা, ভাই, বোন, দাদা-দাদি, নানা-নানী, সন্তান, স্বামী/স্ত্রী; একাধিক), একই সম্পর্কে একটিই রেখা; tests/relations_add.test.ts পাস

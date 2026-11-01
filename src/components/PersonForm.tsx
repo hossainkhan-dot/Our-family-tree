@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import type { ParentKind, Sex } from "../core/relations";
 import { useDb } from "../db/DbContext";
-import { explainError, getProfile, REL_OPTIONS, savePerson, type Living, type PersonIn, type Qualifier, type RelIn, type RelKind, type Status } from "../db/repo";
+import { currentMember, submitChange } from "../db/access";
+import { explainError, getProfile, REL_OPTIONS, type Living, type PersonIn, type Qualifier, type RelIn, type RelKind, type Status } from "../db/repo";
 
 const num = (s: string): number | null => {
   const t = s.replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d))).trim();
@@ -88,7 +89,12 @@ export default function PersonForm({ id, onDone, onCancel }: { id?: string; onDo
       biography: f.biography, personality: f.personality, memories: f.memories,
       sourceKind: f.sourceKind, sourceTitle: f.sourceTitle, informant: f.informant,
     };
-    try { const nid = savePerson(db, inp); reload(); onDone(nid); }
+    try {
+      const o = submitChange(db, currentMember(db), { kind: "save_person", input: inp });
+      reload();
+      if (o.applied) onDone(o.id);
+      else { window.alert("পরিবর্তনটি অনুমোদনের জন্য জমা হয়েছে। প্রয়োজনীয় সংখ্যক সদস্য অনুমোদন দিলে প্রয়োগ হবে।"); onCancel(); }
+    }
     catch (e) { setErr(explainError(e)); window.scrollTo({ top: 0, behavior: "smooth" }); }
   };
   const cands = (k: RelKind) => {

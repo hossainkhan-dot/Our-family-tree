@@ -3,7 +3,7 @@ import { tx } from "./sql";
 
 export const APP = "family-legacy-archive";
 /** Order matters: parents before children so foreign keys resolve. */
-export const TABLES = ["branch", "place", "person", "person_name", "family_union", "parent_child", "event", "media", "media_person",
+export const TABLES = ["branch", "place", "person", "member", "approval_request", "approval_vote", "person_name", "family_union", "parent_child", "event", "media", "media_person",
   "source", "citation", "person_note", "person_attribute", "change_log"] as const;
 
 type Row = Record<string, string | number | null>;
@@ -19,7 +19,8 @@ function schemaVersion(db: Sql): number {
 /** Every row of every table, including soft-deleted rows and the full change history. */
 export function exportBackup(db: Sql): Backup {
   const tables: Record<string, Row[]> = {}, counts: Record<string, number> = {};
-  for (const t of TABLES) { tables[t] = db.all<Row>(`SELECT * FROM ${t}`); counts[t] = tables[t].length; }
+  const have = new Set(db.all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'").map((r) => r.name));
+  for (const t of TABLES) { if (!have.has(t)) continue; tables[t] = db.all<Row>(`SELECT * FROM ${t}`); counts[t] = tables[t].length; }
   const ego = db.all<{ value: string }>("SELECT value FROM app_context WHERE key = 'ego'")[0]?.value ?? null;
   return { app: APP, format: 1, schema: schemaVersion(db), exported_at: new Date().toISOString(), ego, counts, tables };
 }
@@ -42,13 +43,17 @@ export function summarize(b: Backup): { people: number; at: string } {
 export function restoreInto(db: Sql, b: Backup): void {
   if (b.schema > schemaVersion(db)) throw new Error("এই ব্যাকআপ অ্যাপের নতুন সংস্করণের, আগে অ্যাপ আপডেট করুন।");
   if (db.all("SELECT 1 AS x FROM person LIMIT 1").length) throw new Error("ডেটাবেস খালি নয়।");
-  const logTriggers = db.all<{ name: string; sql: string }>("SELECT name, sql FROM sqlite_master WHERE type = 'trigger'").filter((t) => t.name.endsWith("_log_ins"));
-  for (const t of logTriggers) db.run(`DROP TRIGGER ${t.name}`);   // the backup already carries the history
+  const logTriggers = db.all<{ name: string; sql: string }>("SELECT name, sql FROM sqlite_master WHERE type = 'trigger'").filter((t) => t.name.endsWith("_log_ins") || t.name === "trg_vote_rules" || t.name === "trg_request_submit_rules");
+  for (const t of logTriggers) db.run(`DROP TRIGGER ${t.name}`);   // the backup already carries the history and the already-approved votes
   db.run("PRAGMA foreign_keys = OFF");
   try {
     tx(db, () => {
       for (const t of TABLES) {
         const rows = b.tables[t] ?? [];
+        if (!db.all("SELECT 1 AS x FROM sqlite_master WHERE type = 'table' AND name = ?", [t]).length) {
+          if (rows.length) throw new Error(`ব্যাকআপে অচেনা তথ্য আছে (${t})।`);
+          continue;
+        }
         const cols = new Set(db.all<{ name: string }>(`PRAGMA table_info(${t})`).map((c) => c.name));
         for (const r of rows) {
           const ks = Object.keys(r);

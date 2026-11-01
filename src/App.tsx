@@ -6,11 +6,12 @@ import Funnel from "./components/Funnel";
 import TreeScreen from "./components/TreeView";
 import People, { type PeopleView } from "./components/People";
 import Backup from "./components/Backup";
+import Manage from "./components/Manage";
 import { useDb } from "./db/DbContext";
 import { ancestorCount, buildGraph, generationLevels, oldestAncestor } from "./core/relations";
 import "./app.css";
 
-type Tab = "home" | "tree" | "people" | "backup" | "progress";
+type Tab = "home" | "tree" | "people" | "backup" | "more";
 
 const toBn = (n: number | string) => String(n).replace(/\d/g, (d) => "০১২৩৪৫৬৭৮৯"[Number(d)]);
 
@@ -19,20 +20,20 @@ const ICONS: Record<Tab, string> = {
   tree: "M12 3v6m0 0c0 3-6 3-6 7m6-7c0 3 6 3 6 7M6 16v3m12-3v3",
   people: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm7 1a2.5 2.5 0 1 0 0-5M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6m1-5.5c2.7 0 5 2 5 5.5",
   backup: "M12 4v10m0 0l-4-4m4 4l4-4M5 19h14",
-  progress: "M5 6h14M5 12h14M5 18h9",
+  more: "M5 6h14M5 12h14M5 18h9",
 };
 const TABS: { id: Tab; label: string }[] = [
   { id: "home", label: "হোম" },
   { id: "tree", label: "বংশবৃক্ষ" },
   { id: "people", label: "সদস্য" },
   { id: "backup", label: "ব্যাকআপ" },
-  { id: "progress", label: "অগ্রগতি" },
+  { id: "more", label: "আরও" },
 ];
 
 const STEPS: [boolean, string][] = [
   [true, "ভিত্তি ও GitHub বিল্ড"], [true, "ডিজাইন সিস্টেম"], [true, "ডেটাবেস স্কিমা"],
   [true, "সম্পর্কের লজিক"], [true, "প্রোফাইল ও ফর্ম"], [true, "ট্রি ভিউ"],
-  [false, "লগইন, Role ও অনুমোদন"], [true, "ব্যাকআপ ও GEDCOM"],
+  [false, "লগইন (Google), Role ও অনুমোদন — Role/অনুমোদন/History তৈরি, Google লগইন বাকি"], [true, "ব্যাকআপ ও GEDCOM"],
   [false, "মিডিয়া, টাইমলাইন, ম্যাপ, সার্চ"], [false, "Legacy Transfer, Time Capsule, AI"],
 ];
 
@@ -155,7 +156,7 @@ export default function App() {
         {tab === "tree" && <TreeScreen onAdd={() => go({ mode: "form" })} onOpenProfile={(id) => go({ mode: "profile", id })} />}
         {tab === "people" && <People view={pv} setView={go} />}
         {tab === "backup" && <Backup />}
-        {tab === "progress" && <Progress />}
+        {tab === "more" && <Manage progress={<Progress />} />}
       </main>
       {toast && <div className="toast" role="status">{toast}</div>}
       <nav className="tabbar" aria-label="প্রধান মেনু">
