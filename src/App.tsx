@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Funnel from "./components/Funnel";
 import TreeScreen from "./components/TreeView";
+import People, { type PeopleView } from "./components/People";
+import { useDb } from "./db/DbContext";
+import { ancestorCount, buildGraph, generationLevels, oldestAncestor } from "./core/relations";
 import "./app.css";
 
 type Tab = "home" | "tree" | "people" | "progress";
@@ -22,30 +25,48 @@ const TABS: { id: Tab; label: string }[] = [
 
 const STEPS: [boolean, string][] = [
   [true, "ভিত্তি ও GitHub বিল্ড"], [true, "ডিজাইন সিস্টেম"], [true, "ডেটাবেস স্কিমা"],
-  [true, "সম্পর্কের লজিক"], [false, "প্রোফাইল ও ফর্ম"], [false, "ট্রি ভিউ"],
+  [true, "সম্পর্কের লজিক"], [true, "প্রোফাইল ও ফর্ম"], [true, "ট্রি ভিউ"],
   [false, "লগইন, Role ও অনুমোদন"], [false, "ব্যাকআপ ও GEDCOM"],
   [false, "মিডিয়া, টাইমলাইন, ম্যাপ, সার্চ"], [false, "Legacy Transfer, Time Capsule, AI"],
 ];
 
-function Home() {
+function Home({ onAdd }: { onAdd: () => void }) {
+  const { data, ego } = useDb();
+  const g = useMemo(() => buildGraph(data), [data]);
   const [sample, setSample] = useState(false);
+  const me = ego ?? data.people[0]?.id ?? null;
+  const real = useMemo(() => {
+    if (!me) return null;
+    const lv = generationLevels(g, me, 5);
+    let depth = 0;
+    lv.forEach((row, k) => { if (row.some(Boolean)) depth = k; });
+    const old = oldestAncestor(g, me);
+    const year = old ? g.byId.get(old.id)?.birthYear : null;
+    return { levels: lv.slice(0, Math.min(5, depth + 1) + 1), count: ancestorCount(g, me), year };
+  }, [g, me]);
+
+  const showReal = !sample && real;
   return (
     <section className="home">
       <header className="hero-top">
-        <p className="hero-label">{sample ? "১৮৭৬ সাল · নমুনা" : "আপনার বংশধারা"}</p>
-        <p className="hero-num">{sample ? toBn(32) : toBn(0)}</p>
+        <p className="hero-label">{sample ? "১৮৭৬ সাল · নমুনা" : showReal ? (real.year ? `${toBn(real.year)} সাল থেকে` : "আপনার বংশধারা") : "আপনার বংশধারা"}</p>
+        <p className="hero-num">{sample ? toBn(32) : toBn(showReal ? real.count : 0)}</p>
         <p className="hero-sub">জন পূর্বপুরুষ</p>
       </header>
-      <Funnel key={sample ? "sample" : "empty"} gen={sample ? 5 : 1} unknown={!sample} />
+      {showReal
+        ? <Funnel key={`r${real.levels.length}-${real.count}`} gen={real.levels.length - 1} levels={real.levels} />
+        : <Funnel key={sample ? "sample" : "empty"} gen={sample ? 5 : 1} unknown={!sample} />}
       <footer className="hero-foot">
         <p>
-          {sample
-            ? "এটি শুধু ডিজাইনের নমুনা, আসল তথ্য নয়।"
-            : "এখনো কোনো সদস্য যোগ হয়নি। সদস্য যোগের ফর্ম ধাপ ৫-এ আসছে।"}
+          {sample ? "এটি শুধু ডিজাইনের নমুনা, আসল তথ্য নয়।"
+            : showReal ? `রেকর্ডে মোট ${toBn(data.people.length)} জন সদস্য। বাবা-মা, দাদা-দাদি যোগ করলে রেখা বাড়বে।`
+            : "এখনো কোনো সদস্য যোগ হয়নি।"}
         </p>
-        <button className="btn btn-primary" onClick={() => setSample(!sample)}>
-          {sample ? "ফিরে যান" : "নমুনা দেখুন"}
-        </button>
+        <div className="row center">
+          {sample ? <button className="btn btn-primary" onClick={() => setSample(false)}>ফিরে যান</button>
+            : <button className="btn btn-primary" onClick={onAdd}>{showReal ? "সদস্য যোগ করুন" : "প্রথম সদস্য যোগ করুন"}</button>}
+          {!showReal && !sample && <button className="btn" onClick={() => setSample(true)}>নমুনা দেখুন</button>}
+        </div>
       </footer>
     </section>
   );
@@ -80,17 +101,19 @@ function Progress() {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("home");
+  const [pv, setPv] = useState<PeopleView>({ mode: "list" });
+  const go = (v: PeopleView) => { setPv(v); setTab("people"); window.scrollTo(0, 0); };
   return (
     <div className="app">
       <main>
-        {tab === "home" && <Home />}
-        {tab === "tree" && <TreeScreen />}
-        {tab === "people" && <Soon title="সদস্য" step={5} text="প্রতিটি সদস্যের পূর্ণ প্রোফাইল, ছবি, দলিল ও উৎসসহ তথ্য এখানে যোগ ও দেখা যাবে।" />}
+        {tab === "home" && <Home onAdd={() => go({ mode: "form" })} />}
+        {tab === "tree" && <TreeScreen onAdd={() => go({ mode: "form" })} onOpenProfile={(id) => go({ mode: "profile", id })} />}
+        {tab === "people" && <People view={pv} setView={(v) => { setPv(v); window.scrollTo(0, 0); }} />}
         {tab === "progress" && <Progress />}
       </main>
       <nav className="tabbar" aria-label="প্রধান মেনু">
         {TABS.map((t) => (
-          <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)}>
+          <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => { if (t.id === "people") setPv({ mode: "list" }); setTab(t.id); }}>
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[t.id]} /></svg>
             <span>{t.label}</span>
           </button>

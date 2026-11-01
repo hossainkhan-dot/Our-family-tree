@@ -7,14 +7,14 @@ Rule: কোড পাবলিক হতে পারে, আসল পার�
 - [x] ধাপ ২ – ডিজাইন সিস্টেম: Black & Gold টোকেন, কম্পোনেন্ট CSS, preview.html
 - [x] ধাপ ৩ – ডেটাবেস স্কিমা (Person, Union, ParentChild, Event, Source, Place, Media; status; null = অজানা)
 - [x] ধাপ ৪ – সম্পর্কের লজিক (src/core/relations.ts + tests/relations.test.ts, পরীক্ষিত) ও ডুপ্লিকেট শনাক্ত
-- [ ] ধাপ ৫ – প্রোফাইল ও ফর্ম
-- [ ] ধাপ ৬ – ট্রি ভিউ (D3, জুম/পান, সোনালি লাইন)
+- [x] ধাপ ৫ – প্রোফাইল ও ফর্ম (src/db/repo.ts + sql.js + IndexedDB; src/components/PersonForm.tsx, People.tsx; repo টেস্ট পাস)
+- [x] ধাপ ৬ – ট্রি ভিউ (ফোকাস ক্যানভাস, জুম/পান, silhouette; আসল ডেটায় সংযুক্ত। বাকি: Expand/Collapse, Compact/Portrait/Cinematic মোড)
 - [ ] ধাপ ৭ – Google লগইন, Role, ২–৩ জনের অনুমোদন, History
 - [ ] ধাপ ৮ – ব্যাকআপ, JSON/GEDCOM, Restore
 - [ ] ধাপ ৯ – মিডিয়া, টাইমলাইন, ম্যাপ, সার্চ, ড্যাশবোর্ড
 - [ ] ধাপ ১০ – Legacy Transfer, Time Capsule, Knowledge AI, Cinematic View
 
-অগ্রগতি: ৪/১০ (ধাপ ৬-এর ট্রি ক্যানভাস নমুনা ডেটায় তৈরি, আসল ডেটা ধাপ ৫-এর পর যুক্ত হবে)
+অগ্রগতি: ৬/১০
 - [x] APK বিল্ড: GitHub Actions → Artifacts → family-tree-apk
 
 ## আপডেট নিয়ম (গুরুত্বপূর্ণ)
@@ -22,4 +22,4 @@ Rule: কোড পাবলিক হতে পারে, আসল পার�
 - প্রতিটি বিল্ডে versionCode বাড়ে, তাই আনইনস্টল ছাড়াই আপডেট হয়।
 - প্রতিবার জিপের নামে নতুন সংস্করণ (-v3, -v4...)।
 
-টেস্ট চালাতে: node --experimental-strip-types tests/relations.test.ts
+টেস্ট চালাতে: npm test (Node 22+)

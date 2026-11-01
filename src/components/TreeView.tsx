@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type PointerEvent as PE, type WheelEvent as WE } from "react";
-import { buildGraph, focusSet, relation, toBn, type P } from "../core/relations";
+import { buildGraph, focusSet, relation, toBn, type Data, type P } from "../core/relations";
+import { useDb } from "../db/DbContext";
 import { SAMPLE, SAMPLE_EGO } from "../core/sample";
 
 const VBW = 360, VBH = 500, CX = 180, SP = 78;
@@ -24,23 +25,31 @@ const years = (p: P) =>
   p.birthYear == null && p.deathYear == null ? "সাল অজানা"
   : `${p.birthYear != null ? toBn(p.birthYear) : "?"} – ${p.deathYear != null ? toBn(p.deathYear) : p.living ? "বর্তমান" : "?"}`;
 
-export default function TreeScreen() {
+export default function TreeScreen({ onAdd, onOpenProfile }: { onAdd: () => void; onOpenProfile: (id: string) => void }) {
+  const { data, ego } = useDb();
   const [sample, setSample] = useState(false);
-  if (!sample) {
+  if (sample) return <Canvas data={SAMPLE} startEgo={SAMPLE_EGO} meId={SAMPLE_EGO} badge="নমুনা পরিবার" onBack={() => setSample(false)} />;
+  if (data.people.length === 0) {
     return (
       <section className="panel">
         <h1>বংশবৃক্ষ</h1>
-        <p className="muted">এখনো কোনো সদস্য যোগ হয়নি। সদস্য যোগের ফর্ম ধাপ ৫-এ আসছে। ততক্ষণ নমুনা পরিবার দিয়ে বংশবৃক্ষ কেমন কাজ করবে দেখে নিন।</p>
-        <button className="btn btn-primary" onClick={() => setSample(true)}>নমুনা পরিবার দেখুন</button>
+        <p className="muted">এখনো কোনো সদস্য যোগ হয়নি। প্রথম সদস্য যোগ করলেই এখানে বংশবৃক্ষ আঁকা শুরু হবে।</p>
+        <div className="row">
+          <button className="btn btn-primary" onClick={onAdd}>প্রথম সদস্য যোগ করুন</button>
+          <button className="btn" onClick={() => setSample(true)}>নমুনা দেখুন</button>
+        </div>
       </section>
     );
   }
-  return <Canvas onBack={() => setSample(false)} />;
+  const start = ego ?? data.people[0].id;
+  return <Canvas key={start} data={data} startEgo={start} meId={ego ?? ""} onOpenProfile={onOpenProfile} />;
 }
 
-function Canvas({ onBack }: { onBack: () => void }) {
-  const g = useMemo(() => buildGraph(SAMPLE), []);
-  const [ego, setEgo] = useState(SAMPLE_EGO);
+function Canvas({ data, startEgo, meId, badge, onBack, onOpenProfile }:
+  { data: Data; startEgo: string; meId: string; badge?: string; onBack?: () => void; onOpenProfile?: (id: string) => void }) {
+  const g = useMemo(() => buildGraph(data), [data]);
+  const [egoState, setEgo] = useState(startEgo);
+  const ego = g.byId.has(egoState) ? egoState : startEgo;
   const [sel, setSel] = useState<string | null>(null);
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const svgRef = useRef<SVGSVGElement>(null);
@@ -111,14 +120,15 @@ function Canvas({ onBack }: { onBack: () => void }) {
   const pick = (id: string) => { if (moved.current <= 6) setSel(id); };
 
   const person = (id: string) => g.byId.get(id)!;
-  const label = (id: string) => (id === ego ? (ego === SAMPLE_EGO ? "আপনি" : "কেন্দ্র") : relation(g, ego, id) ?? "সম্পর্ক অজানা");
+  if (sel && !g.byId.has(sel)) setSel(null);
+  const label = (id: string) => (id === ego ? (ego === meId ? "আপনি" : "কেন্দ্র") : relation(g, ego, id) ?? "সম্পর্ক অজানা");
   const selP = sel ? person(sel) : null;
 
   return (
     <section className="treebox-wrap">
       <div className="tree-head">
-        <button className="btn" onClick={onBack}>ফিরে যান</button>
-        <span className="status pending">নমুনা পরিবার</span>
+        {onBack ? <button className="btn" onClick={onBack}>ফিরে যান</button> : <h1 className="tree-title">বংশবৃক্ষ</h1>}
+        {badge && <span className="status pending">{badge}</span>}
       </div>
       <div className="treebox">
         <svg ref={svgRef} className="tree-svg" viewBox={`0 0 ${VBW} ${VBH}`}
@@ -137,7 +147,7 @@ function Canvas({ onBack }: { onBack: () => void }) {
                 return <path key={`${e.parent}-${n.id}`} className="tree-line" d={`M${p.x} ${p.y + 26}C${p.x} ${m},${n.x} ${m},${n.x} ${n.y - 26}`} />;
               });
             })}
-            {SAMPLE.unions.map((u) => {
+            {data.unions.map((u) => {
               const a = pos.get(u.a), b = pos.get(u.b);
               return a && b && a.y === b.y ? <path key={u.a + u.b} className="tree-line" d={`M${a.x + 26} ${a.y}L${b.x - 26} ${b.y}`} /> : null;
             })}
@@ -179,8 +189,9 @@ function Canvas({ onBack }: { onBack: () => void }) {
           <div className="sheet" role="dialog" aria-label={selP.name}>
             <h2>{selP.name}</h2>
             <p className="muted">{label(selP.id)} · {years(selP)}</p>
-            <p><span className="status unverified">অযাচাইকৃত</span> <span className="muted">পূর্ণ প্রোফাইল ধাপ ৫-এ আসছে</span></p>
+            
             <div className="row">
+              {onOpenProfile && <button className="btn" onClick={() => onOpenProfile(selP.id)}>প্রোফাইল দেখুন</button>}
               {selP.id !== ego && <button className="btn btn-primary" onClick={() => { setEgo(selP.id); setSel(null); setView({ x: 0, y: 0, k: 1 }); }}>এঁকে কেন্দ্র করুন</button>}
               <button className="btn" onClick={() => setSel(null)}>বন্ধ করুন</button>
             </div>

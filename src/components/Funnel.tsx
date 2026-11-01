@@ -1,5 +1,5 @@
 /** Golden ancestor funnel: ancestors at the top, lines flow down and converge on "you". */
-interface Props { gen: number; unknown?: boolean }
+interface Props { gen: number; unknown?: boolean; levels?: (string | null)[][] }
 
 const W = 360, H = 460, CX = W / 2, Y_TOP = 40, Y_BOT = H - 70;
 
@@ -11,21 +11,23 @@ const levelX = (k: number, i: number, gen: number) => {
   return CX + (i - (n - 1) / 2) * (width / (n - 1));
 };
 
-export default function Funnel({ gen, unknown = false }: Props) {
+export default function Funnel({ gen, unknown = false, levels }: Props) {
   const paths: JSX.Element[] = [];
   const dots: JSX.Element[] = [];
   for (let k = 0; k < gen; k++) {
     const n = 2 ** k;
     const delay = (gen - 1 - k) * 0.45;
     for (let i = 0; i < n; i++) {
+      if (levels && !levels[k]?.[i]) continue;          // only show unknown slots next to a known person
       for (const p of [2 * i, 2 * i + 1]) {
+        const isKnown = levels ? !!levels[k + 1]?.[p] : !unknown;
         const xc = levelX(k, i, gen), yc = levelY(k, gen);
         const xp = levelX(k + 1, p, gen), yp = levelY(k + 1, gen);
         const ym = (yp + yc) / 2;
         paths.push(
           <path
             key={`${k}-${p}`}
-            className={unknown ? "tree-line placeholder" : "tree-line draw"}
+            className={isKnown ? "tree-line draw" : "tree-line placeholder"}
             pathLength={1}
             style={{ animationDelay: `${delay + (p % 4) * 0.04}s` }}
             strokeOpacity={0.95 - 0.5 * (k / gen)}
@@ -33,7 +35,7 @@ export default function Funnel({ gen, unknown = false }: Props) {
             d={`M${xp} ${yp} C${xp} ${ym}, ${xc} ${ym}, ${xc} ${yc}`}
           />
         );
-        dots.push(<circle key={`d${k}-${p}`} cx={xp} cy={yp} r={unknown ? 3 : 1.7} className={unknown ? "dot-unknown" : "dot-gold"} />);
+        dots.push(<circle key={`d${k}-${p}`} cx={xp} cy={yp} r={isKnown ? 1.7 : 3} className={isKnown ? "dot-gold" : "dot-unknown"} />);
       }
     }
   }

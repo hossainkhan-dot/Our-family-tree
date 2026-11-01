@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --import ./tests/register.mjs --experimental-strip-types tests/relations.test.ts && node --import ./tests/register.mjs --experimental-strip-types tests/repo.test.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "@capacitor/core": "^6.1.2",
-    "@capacitor/android": "^6.1.2"
+    "@capacitor/android": "^6.1.2",
+    "sql.js": "1.10.3"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
@@ -20,7 +22,8 @@
     "@vitejs/plugin-react": "^4.3.1",
     "typescript": "^5.5.4",
     "vite": "^5.4.0",
-    "@capacitor/cli": "^6.1.2"
+    "@capacitor/cli": "^6.1.2",
+    "@types/sql.js": "1.4.9"
   },
   "overrides": {
     "rollup": "4.24.0"

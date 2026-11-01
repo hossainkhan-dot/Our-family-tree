@@ -1,0 +1,239 @@
+import { buildGraph, toBn, wouldCreateCycle, type Data, type P, type ParentKind, type Sex } from "../core/relations";
+import { tx, type Sql } from "./sql";
+
+export type Status = "verified" | "unverified" | "estimated" | "unknown";
+export type Qualifier = "unknown" | "exact" | "about" | "before" | "after" | "between";
+export interface DateIn { q: Qualifier; y?: number | null; m?: number | null; d?: number | null }
+export type Living = "living" | "deceased" | "unknown";
+
+export interface PersonIn {
+  id?: string;
+  nameBn?: string; nameEn?: string; nickname?: string; title?: string;
+  sex: Sex; living: Living; status: Status; isMe?: boolean;
+  birth?: DateIn; birthPlace?: string; death?: DateIn; deathPlace?: string;
+  fatherId?: string | null; motherId?: string | null; parentKind?: ParentKind; spouseIds?: string[];
+  education?: string; institution?: string; occupation?: string; workplace?: string; achievements?: string;
+  biography?: string; personality?: string; memories?: string;
+  sourceKind?: string; sourceTitle?: string; informant?: string;
+}
+
+const ACTOR = "owner";
+const uid = (): string =>
+  globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
+const now = () => new Date().toISOString();
+
+/** Insert, update or soft-delete a single child row identified by `where`. */
+function setRow(db: Sql, table: string, where: Record<string, string>, cols: Record<string, unknown>, keep: boolean) {
+  const wk = Object.keys(where);
+  const cond = wk.map((k) => `${k} = ?`).join(" AND ") + " AND deleted_at IS NULL";
+  const ex = db.all<{ id: string }>(`SELECT id FROM ${table} WHERE ${cond}`, wk.map((k) => where[k]))[0];
+  if (!keep) {
+    if (ex) db.run(`UPDATE ${table} SET deleted_at = ?, updated_at = ? WHERE id = ?`, [now(), now(), ex.id]);
+    return;
+  }
+  if (ex) {
+    const ck = Object.keys(cols);
+    db.run(`UPDATE ${table} SET ${ck.map((k) => `${k} = ?`).join(", ")}, updated_at = ? WHERE id = ?`, [...ck.map((k) => cols[k]), now(), ex.id]);
+  } else {
+    const all = { ...where, ...cols };
+    const ks = Object.keys(all);
+    db.run(`INSERT INTO ${table} (id, ${ks.join(", ")}, created_by) VALUES (?, ${ks.map(() => "?").join(", ")}, ?)`, [uid(), ...ks.map((k) => all[k]), ACTOR]);
+  }
+}
+
+function placeId(db: Sql, name: string): string {
+  const ex = db.all<{ id: string }>("SELECT id FROM place WHERE name_bn = ? AND deleted_at IS NULL", [name])[0];
+  if (ex) return ex.id;
+  const id = uid();
+  db.run("INSERT INTO place (id, name_bn, type, created_by) VALUES (?, ?, 'village', ?)", [id, name, ACTOR]);
+  return id;
+}
+
+export function validate(inp: PersonIn): string | null {
+  if (!(inp.nameBn ?? "").trim() && !(inp.nameEn ?? "").trim()) return "অন্তত একটি নাম (বাংলা বা ইংরেজি) দিন।";
+  for (const [label, d] of [["জন্মের", inp.birth], ["মৃত্যুর", inp.death]] as const) {
+    if (!d || d.q === "unknown") continue;
+    if (!d.y) return `${label} তারিখে বছর দিতে হবে। জানা না থাকলে "অজানা" বেছে নিন।`;
+    if (d.d && !d.m) return `${label} তারিখে দিন দিলে মাসও দিন।`;
+    if (d.m && (d.m < 1 || d.m > 12)) return `${label} মাস ১ থেকে ১২ এর মধ্যে হতে হবে।`;
+    if (d.d && (d.d < 1 || d.d > 31)) return `${label} দিন ১ থেকে ৩১ এর মধ্যে হতে হবে।`;
+  }
+  if (inp.birth?.y && inp.death?.y && inp.birth.q !== "unknown" && inp.death.q !== "unknown" && inp.death.y < inp.birth.y)
+    return "মৃত্যুর সাল জন্মের সালের আগে হতে পারে না।";
+  if (inp.id && (inp.fatherId === inp.id || inp.motherId === inp.id || inp.spouseIds?.includes(inp.id)))
+    return "কেউ নিজের বাবা, মা বা স্বামী/স্ত্রী হতে পারে না।";
+  return null;
+}
+
+export function savePerson(db: Sql, inp: PersonIn): string {
+  const bad = validate(inp);
+  if (bad) throw new Error(bad);
+  return tx(db, () => {
+    const id = inp.id ?? uid();
+    if (db.all("SELECT id FROM person WHERE id = ?", [id]).length)
+      db.run("UPDATE person SET sex = ?, living_status = ?, status = ?, updated_at = ? WHERE id = ?", [inp.sex, inp.living, inp.status, now(), id]);
+    else db.run("INSERT INTO person (id, sex, living_status, status, created_by) VALUES (?, ?, ?, ?, ?)", [id, inp.sex, inp.living, inp.status, ACTOR]);
+
+    const name = (kind: string, lang: string, v: string | undefined, primary: number) => {
+      const t = (v ?? "").trim();
+      setRow(db, "person_name", { person_id: id, kind }, { language: lang, full_name: t, is_primary: primary, status: inp.status }, t.length > 0);
+    };
+    name("bangla", "bn", inp.nameBn, 1); name("english", "en", inp.nameEn, 1);
+    name("nickname", "bn", inp.nickname, 0); name("title", "bn", inp.title, 0);
+
+    const event = (type: string, d: DateIn | undefined, place: string | undefined) => {
+      const q = d?.q ?? "unknown", pl = (place ?? "").trim();
+      const known = q !== "unknown";
+      setRow(db, "event", { person_id: id, type }, {
+        d_qualifier: q, d_y: known ? d!.y ?? null : null, d_m: known ? d!.m ?? null : null, d_d: known ? d!.d ?? null : null,
+        place_id: pl ? placeId(db, pl) : null, status: inp.status,
+      }, known || pl.length > 0);
+    };
+    event("birth", inp.birth, inp.birthPlace);
+    event("death", inp.living === "living" ? undefined : inp.death, inp.living === "living" ? undefined : inp.deathPlace);
+
+    const parent = (role: "father" | "mother", pid: string | null | undefined) => {
+      const want = pid || null;
+      const cur = db.all<{ id: string; parent_id: string }>("SELECT id, parent_id FROM parent_child WHERE child_id = ? AND parent_role = ? AND deleted_at IS NULL", [id, role]);
+      for (const c of cur) if (c.parent_id !== want) db.run("UPDATE parent_child SET deleted_at = ?, updated_at = ? WHERE id = ?", [now(), now(), c.id]);
+      if (!want) return;
+      if (cur.some((c) => c.parent_id === want)) {
+        if (inp.parentKind) db.run("UPDATE parent_child SET kind = ?, updated_at = ? WHERE child_id = ? AND parent_id = ? AND deleted_at IS NULL", [inp.parentKind, now(), id, want]);
+        return;
+      }
+      if (wouldCreateCycle(buildGraph(loadData(db)), want, id)) throw new Error("CYCLE");
+      db.run("INSERT INTO parent_child (id, parent_id, child_id, kind, parent_role, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [uid(), want, id, inp.parentKind ?? "biological", role, inp.status, ACTOR]);
+    };
+    if (inp.fatherId !== undefined) parent("father", inp.fatherId);
+    if (inp.motherId !== undefined) parent("mother", inp.motherId);
+
+    if (inp.spouseIds) {
+      const want = new Set(inp.spouseIds.filter((s) => s !== id));
+      const have = db.all<{ id: string; a: string | null; b: string | null }>(
+        "SELECT id, partner1_id AS a, partner2_id AS b FROM family_union WHERE (partner1_id = ? OR partner2_id = ?) AND deleted_at IS NULL", [id, id]);
+      for (const u of have) {
+        const other = u.a === id ? u.b : u.a;
+        if (!other) continue;
+        if (want.has(other)) want.delete(other);
+        else db.run("UPDATE family_union SET deleted_at = ?, updated_at = ? WHERE id = ?", [now(), now(), u.id]);
+      }
+      for (const s of want)
+        db.run("INSERT INTO family_union (id, partner1_id, partner2_id, kind, status, created_by) VALUES (?, ?, ?, 'marriage', ?, ?)", [uid(), id, s, inp.status, ACTOR]);
+    }
+
+    const attr = (key: string, v: string | undefined) => {
+      const t = (v ?? "").trim();
+      setRow(db, "person_attribute", { person_id: id, key }, { value: t, status: inp.status }, t.length > 0);
+    };
+    attr("education", inp.education); attr("institution", inp.institution); attr("occupation", inp.occupation);
+    attr("workplace", inp.workplace); attr("achievements", inp.achievements);
+    const note = (kind: string, v: string | undefined) => {
+      const t = (v ?? "").trim();
+      setRow(db, "person_note", { person_id: id, kind }, { body: t, language: "bn", status: inp.status }, t.length > 0);
+    };
+    note("biography", inp.biography); note("personality", inp.personality); note("memory", inp.memories);
+
+    const st = (inp.sourceTitle ?? "").trim();
+    if (st) {
+      const sid = uid();
+      db.run("INSERT INTO source (id, kind, title, informant, created_by) VALUES (?, ?, ?, ?, ?)", [sid, inp.sourceKind || "other", st, (inp.informant ?? "").trim() || null, ACTOR]);
+      db.run("INSERT INTO citation (id, source_id, target_table, target_id, created_by) VALUES (?, ?, 'person', ?, ?)", [uid(), sid, id, ACTOR]);
+    }
+    if (inp.isMe) setEgo(db, id);
+    return id;
+  });
+}
+
+export function deletePerson(db: Sql, id: string) {
+  tx(db, () => {
+    const t = now();
+    const wasEgo = db.all<{ value: string }>("SELECT value FROM app_context WHERE key = 'ego'")[0]?.value === id;
+    db.run("UPDATE parent_child SET deleted_at = ?, updated_at = ? WHERE (parent_id = ? OR child_id = ?) AND deleted_at IS NULL", [t, t, id, id]);
+    db.run("UPDATE family_union SET deleted_at = ?, updated_at = ? WHERE (partner1_id = ? OR partner2_id = ?) AND deleted_at IS NULL", [t, t, id, id]);
+    db.run("UPDATE person SET deleted_at = ?, updated_at = ? WHERE id = ?", [t, t, id]);
+    if (wasEgo) db.run("DELETE FROM app_context WHERE key = 'ego'");
+  });
+}
+
+export function setEgo(db: Sql, id: string) { db.run("INSERT OR REPLACE INTO app_context (key, value) VALUES ('ego', ?)", [id]); }
+export function getEgo(db: Sql): string | null {
+  const r = db.all<{ value: string }>("SELECT value FROM app_context WHERE key = 'ego'")[0];
+  if (!r) return null;
+  return db.all("SELECT id FROM person WHERE id = ? AND deleted_at IS NULL", [r.value]).length ? r.value : null;
+}
+
+export function loadData(db: Sql): Data {
+  const nm = (cond: string) => `(SELECT full_name FROM person_name n WHERE n.person_id = p.id AND n.deleted_at IS NULL AND ${cond} LIMIT 1)`;
+  const ev = (t: string) => `(SELECT d_y FROM event e WHERE e.person_id = p.id AND e.type = '${t}' AND e.deleted_at IS NULL LIMIT 1)`;
+  const rows = db.all<{ id: string; sex: Sex; living_status: string; bn: string | null; en: string | null; nick: string | null; b_y: number | null; d_y: number | null }>(
+    `SELECT p.id, p.sex, p.living_status, ${nm("n.language = 'bn' AND n.is_primary = 1")} AS bn, ${nm("n.language = 'en' AND n.is_primary = 1")} AS en,
+     ${nm("n.kind = 'nickname'")} AS nick, ${ev("birth")} AS b_y, ${ev("death")} AS d_y
+     FROM person p WHERE p.deleted_at IS NULL AND p.is_placeholder = 0`);
+  const people: P[] = rows.map((r) => {
+    const name = r.bn ?? r.en ?? "নামহীন";
+    return { id: r.id, sex: r.sex, name, short: r.nick ?? name.split(" ")[0], birthYear: r.b_y, deathYear: r.d_y,
+      living: r.living_status === "living" ? true : r.living_status === "deceased" ? false : null };
+  });
+  const ids = new Set(people.map((p) => p.id));
+  const edges = db.all<{ parent_id: string; child_id: string; kind: ParentKind; parent_role: "father" | "mother" | "parent" }>(
+    "SELECT parent_id, child_id, kind, parent_role FROM parent_child WHERE deleted_at IS NULL")
+    .filter((e) => ids.has(e.parent_id) && ids.has(e.child_id))
+    .map((e) => ({ parent: e.parent_id, child: e.child_id, kind: e.kind, role: e.parent_role }));
+  const unions = db.all<{ a: string; b: string }>(
+    "SELECT partner1_id AS a, partner2_id AS b FROM family_union WHERE deleted_at IS NULL AND partner1_id IS NOT NULL AND partner2_id IS NOT NULL")
+    .filter((u) => ids.has(u.a) && ids.has(u.b));
+  return { people, edges, unions };
+}
+
+export interface Profile extends PersonIn {
+  id: string; isMe: boolean; spouseIds: string[]; sources: { title: string; kind: string; informant: string | null }[];
+}
+export function getProfile(db: Sql, id: string): Profile | null {
+  const p = db.all<{ sex: Sex; living_status: Living; status: Status }>("SELECT sex, living_status, status FROM person WHERE id = ? AND deleted_at IS NULL", [id])[0];
+  if (!p) return null;
+  const val = (table: string, col: string, keyCol: string, key: string) =>
+    db.all<Record<string, string>>(`SELECT ${col} AS v FROM ${table} WHERE person_id = ? AND ${keyCol} = ? AND deleted_at IS NULL`, [id, key])[0]?.v ?? "";
+  const ev = (type: string): { d: DateIn; place: string } => {
+    const r = db.all<{ q: Qualifier; y: number | null; m: number | null; d: number | null; pl: string | null }>(
+      `SELECT e.d_qualifier AS q, e.d_y AS y, e.d_m AS m, e.d_d AS d, (SELECT name_bn FROM place WHERE id = e.place_id) AS pl
+       FROM event e WHERE e.person_id = ? AND e.type = ? AND e.deleted_at IS NULL LIMIT 1`, [id, type])[0];
+    return r ? { d: { q: r.q, y: r.y, m: r.m, d: r.d }, place: r.pl ?? "" } : { d: { q: "unknown" }, place: "" };
+  };
+  const par = (role: string) => db.all<{ parent_id: string; kind: ParentKind }>(
+    "SELECT parent_id, kind FROM parent_child WHERE child_id = ? AND parent_role = ? AND deleted_at IS NULL", [id, role])[0];
+  const f = par("father"), m = par("mother"), b = ev("birth"), d = ev("death");
+  const spouses = db.all<{ a: string | null; b: string | null }>(
+    "SELECT partner1_id AS a, partner2_id AS b FROM family_union WHERE (partner1_id = ? OR partner2_id = ?) AND deleted_at IS NULL", [id, id])
+    .map((u) => (u.a === id ? u.b : u.a)).filter((x): x is string => !!x);
+  const sources = db.all<{ title: string; kind: string; informant: string | null }>(
+    "SELECT s.title, s.kind, s.informant FROM citation c JOIN source s ON s.id = c.source_id WHERE c.target_table = 'person' AND c.target_id = ? AND c.deleted_at IS NULL AND s.deleted_at IS NULL", [id]);
+  const at = (k: string) => val("person_attribute", "value", "key", k), nt = (k: string) => val("person_note", "body", "kind", k);
+  return {
+    id, sex: p.sex, living: p.living_status, status: p.status, isMe: getEgo(db) === id,
+    nameBn: val("person_name", "full_name", "kind", "bangla"), nameEn: val("person_name", "full_name", "kind", "english"),
+    nickname: val("person_name", "full_name", "kind", "nickname"), title: val("person_name", "full_name", "kind", "title"),
+    birth: b.d, birthPlace: b.place, death: d.d, deathPlace: d.place,
+    fatherId: f?.parent_id ?? null, motherId: m?.parent_id ?? null, parentKind: f?.kind ?? m?.kind ?? "biological", spouseIds: spouses,
+    education: at("education"), institution: at("institution"), occupation: at("occupation"), workplace: at("workplace"), achievements: at("achievements"),
+    biography: nt("biography"), personality: nt("personality"), memories: nt("memory"), sources,
+  };
+}
+
+const MONTHS = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+export function formatDate(d: DateIn | undefined): string {
+  if (!d || d.q === "unknown" || !d.y) return "অজানা";
+  const core = [d.d ? toBn(d.d) : "", d.m ? MONTHS[d.m - 1] : "", toBn(d.y)].filter(Boolean).join(" ");
+  if (d.q === "about") return `আনুমানিক ${core}`;
+  if (d.q === "before") return `${core}-এর আগে`;
+  if (d.q === "after") return `${core}-এর পরে`;
+  return core;
+}
+
+export function explainError(e: unknown): string {
+  const m = e instanceof Error ? e.message : String(e);
+  if (/CYCLE|cycle/.test(m)) return "এটি করলে কেউ নিজেই নিজের পূর্বপুরুষ হয়ে যায়, তাই সম্ভব নয়।";
+  if (/at most 2 biological/.test(m)) return "একজনের জৈবিক বাবা-মা ২ জনের বেশি হতে পারে না।";
+  if (/[\u0980-\u09FF]/.test(m)) return m;
+  return `সংরক্ষণ করা যায়নি: ${m}`;
+}
