@@ -11,6 +11,8 @@ Rule: কোড পাবলিক হতে পারে, আসল পার�
 - [x] ধাপ ৬ – ট্রি ভিউ (ফোকাস ক্যানভাস, জুম/পান, silhouette; আসল ডেটায় সংযুক্ত। বাকি: Expand/Collapse, Compact/Portrait/Cinematic মোড)
 - [ ] ধাপ ৭ – Google লগইন, Role, ২–৩ জনের অনুমোদন, History
 - [x] ধাপ ৮ – ব্যাকআপ, JSON/GEDCOM 5.5.1, Restore (src/db/backup.ts, gedcom.ts, snapshots.ts, components/Backup.tsx; tests/backup.test.ts পাস)
+  - [x] ৮ক – ZIP ব্যাকআপ প্যাকেজ (data.json + GEDCOM + README + SHA-256 চেকসাম, src/db/zip.ts, package.ts), যাচাইসহ Restore, ব্যাকআপের খাতা; tests/package.test.ts পাস
+  - [ ] ৮খ – Google Drive অটো-ব্যাকআপ ও অন্য Drive অ্যাকাউন্টে কপি (ধাপ ৭-এর Google OAuth শেষ হলে; তার আগে ZIP শেয়ার-শিট দিয়ে যেকোনো Drive-এ রাখা যায়)
 - [ ] ধাপ ৯ – মিডিয়া, টাইমলাইন, ম্যাপ, সার্চ, ড্যাশবোর্ড
 - [ ] ধাপ ১০ – Legacy Transfer, Time Capsule, Knowledge AI, Cinematic View
 
