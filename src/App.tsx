@@ -1,4 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { App as CapApp } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
+import { runTopBack } from "./core/back";
 import Funnel from "./components/Funnel";
 import TreeScreen from "./components/TreeView";
 import People, { type PeopleView } from "./components/People";
@@ -104,22 +107,60 @@ function Progress() {
   );
 }
 
+interface Nav { tab: Tab; pv: PeopleView }
+const same = (a: Nav, b: Nav) => a.tab === b.tab && JSON.stringify(a.pv) === JSON.stringify(b.pv);
+const isForm = (n: Nav) => n.tab === "people" && n.pv.mode === "form";
+
 export default function App() {
-  const [tab, setTab] = useState<Tab>("home");
-  const [pv, setPv] = useState<PeopleView>({ mode: "list" });
-  const go = (v: PeopleView) => { setPv(v); setTab("people"); window.scrollTo(0, 0); };
+  const [nav, setNav] = useState<Nav>({ tab: "home", pv: { mode: "list" } });
+  const cur = useRef(nav), stack = useRef<Nav[]>([]), warn = useRef({ form: 0, exit: 0 });
+  const [toast, setToast] = useState<string | null>(null);
+  const timer = useRef<number>();
+  const say = (t: string) => { setToast(t); window.clearTimeout(timer.current); timer.current = window.setTimeout(() => setToast(null), 2200); };
+  const show = (n: Nav) => { cur.current = n; setNav(n); window.scrollTo(0, 0); };
+  const navTo = (n: Nav) => {
+    if (same(cur.current, n)) return;
+    stack.current.push(cur.current);
+    if (stack.current.length > 40) stack.current.shift();
+    show(n);
+  };
+  const go = (v: PeopleView) => navTo({ tab: "people", pv: v });
+
+  /** Phone back button: close popup > previous screen > home > "press again to exit". */
+  const back = () => {
+    if (runTopBack()) return;
+    const now = Date.now(), c = cur.current;
+    if (isForm(c) && now - warn.current.form > 2500) { warn.current.form = now; say("সংরক্ষণ না করে ফিরলে লেখা হারাবে। আবার ব্যাক চাপলে ফিরবে।"); return; }
+    let prev = stack.current.pop();
+    while (prev && isForm(prev)) prev = stack.current.pop();
+    if (prev) { show(prev); return; }
+    if (c.tab !== "home") { show({ tab: "home", pv: { mode: "list" } }); return; }
+    if (now - warn.current.exit < 2000) { void CapApp.exitApp(); return; }
+    warn.current.exit = now;
+    say("আবার ব্যাক চাপলে অ্যাপ বন্ধ হবে");
+  };
+  const backRef = useRef(back); backRef.current = back;
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let dead = false, handle: { remove: () => Promise<void> } | undefined;
+    void CapApp.addListener("backButton", () => backRef.current()).then((h) => { if (dead) void h.remove(); else handle = h; });
+    return () => { dead = true; void handle?.remove(); };
+  }, []);
+
+  const { tab, pv } = nav;
   return (
     <div className="app">
       <main>
-        {tab === "home" && <Home onAdd={() => go({ mode: "form" })} onBackup={() => setTab("backup")} />}
+        {tab === "home" && <Home onAdd={() => go({ mode: "form" })} onBackup={() => navTo({ tab: "backup", pv })} />}
         {tab === "tree" && <TreeScreen onAdd={() => go({ mode: "form" })} onOpenProfile={(id) => go({ mode: "profile", id })} />}
-        {tab === "people" && <People view={pv} setView={(v) => { setPv(v); window.scrollTo(0, 0); }} />}
+        {tab === "people" && <People view={pv} setView={go} />}
         {tab === "backup" && <Backup />}
         {tab === "progress" && <Progress />}
       </main>
+      {toast && <div className="toast" role="status">{toast}</div>}
       <nav className="tabbar" aria-label="প্রধান মেনু">
         {TABS.map((t) => (
-          <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => { if (t.id === "people") setPv({ mode: "list" }); setTab(t.id); }}>
+          <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => navTo({ tab: t.id, pv: t.id === "people" ? { mode: "list" } : pv })}>
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[t.id]} /></svg>
             <span>{t.label}</span>
           </button>

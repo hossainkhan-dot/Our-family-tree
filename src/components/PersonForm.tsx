@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ParentKind, Sex } from "../core/relations";
 import { useDb } from "../db/DbContext";
-import { explainError, getProfile, savePerson, type Living, type PersonIn, type Qualifier, type Status } from "../db/repo";
+import { explainError, getProfile, REL_OPTIONS, savePerson, type Living, type PersonIn, type Qualifier, type RelIn, type RelKind, type Status } from "../db/repo";
 
 const num = (s: string): number | null => {
   const t = s.replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d))).trim();
@@ -13,7 +13,7 @@ interface F {
   nameBn: string; nameEn: string; nickname: string; title: string; sex: Sex; living: Living; isMe: boolean;
   bq: Qualifier; by: string; bm: string; bd: string; birthPlace: string;
   dq: Qualifier; dy: string; dm: string; dd: string; deathPlace: string;
-  fatherId: string; motherId: string; parentKind: ParentKind; spouseIds: string[];
+  rels: RelIn[]; parentKind: ParentKind;
   education: string; institution: string; occupation: string; workplace: string; achievements: string;
   biography: string; personality: string; memories: string;
   status: Status; sourceKind: string; sourceTitle: string; informant: string;
@@ -57,7 +57,9 @@ export default function PersonForm({ id, onDone, onCancel }: { id?: string; onDo
       sex: p?.sex ?? "unknown", living: p?.living ?? "living", isMe: p ? p.isMe : !ego,
       bq: p?.birth?.q ?? "unknown", by: s(p?.birth?.y), bm: s(p?.birth?.m), bd: s(p?.birth?.d), birthPlace: p?.birthPlace ?? "",
       dq: p?.death?.q ?? "unknown", dy: s(p?.death?.y), dm: s(p?.death?.m), dd: s(p?.death?.d), deathPlace: p?.deathPlace ?? "",
-      fatherId: p?.fatherId ?? "", motherId: p?.motherId ?? "", parentKind: p?.parentKind ?? "biological", spouseIds: p?.spouseIds ?? [],
+      rels: p ? [...(p.fatherId ? [{ kind: "father" as RelKind, otherId: p.fatherId }] : []), ...(p.motherId ? [{ kind: "mother" as RelKind, otherId: p.motherId }] : []),
+        ...p.spouseIds.map((o) => ({ kind: "spouse" as RelKind, otherId: o }))] : [],
+      parentKind: p?.parentKind ?? "biological",
       education: p?.education ?? "", institution: p?.institution ?? "", occupation: p?.occupation ?? "", workplace: p?.workplace ?? "", achievements: p?.achievements ?? "",
       biography: p?.biography ?? "", personality: p?.personality ?? "", memories: p?.memories ?? "",
       status: p?.status ?? "unverified", sourceKind: "elder_testimony", sourceTitle: "", informant: "",
@@ -67,12 +69,21 @@ export default function PersonForm({ id, onDone, onCancel }: { id?: string; onDo
   const up = (p: Partial<F>) => setF((x) => ({ ...x, ...p }));
   const others = data.people.filter((p) => p.id !== id).sort((a, b) => a.name.localeCompare(b.name, "bn"));
 
+  const fail = (m: string) => { setErr(m); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const submit = () => {
+    const rels = f.rels.filter((r) => r.otherId);
+    const uniq = (a: string[]) => [...new Set(a)];
+    const fathers = uniq(rels.filter((r) => r.kind === "father").map((r) => r.otherId));
+    const mothers = uniq(rels.filter((r) => r.kind === "mother").map((r) => r.otherId));
+    if (fathers.length > 1) return fail("বাবা একজনের বেশি হতে পারে না।");
+    if (mothers.length > 1) return fail("মা একজনের বেশি হতে পারে না।");
     const inp: PersonIn = {
       id, nameBn: f.nameBn, nameEn: f.nameEn, nickname: f.nickname, title: f.title, sex: f.sex, living: f.living, status: f.status, isMe: f.isMe,
       birth: { q: f.bq, y: num(f.by), m: num(f.bm), d: num(f.bd) }, birthPlace: f.birthPlace,
       death: { q: f.dq, y: num(f.dy), m: num(f.dm), d: num(f.dd) }, deathPlace: f.deathPlace,
-      fatherId: f.fatherId || null, motherId: f.motherId || null, parentKind: f.parentKind, spouseIds: f.spouseIds,
+      fatherId: fathers[0] ?? null, motherId: mothers[0] ?? null, parentKind: f.parentKind,
+      spouseIds: uniq(rels.filter((r) => r.kind === "spouse").map((r) => r.otherId)),
+      relations: rels.filter((r) => !["father", "mother", "spouse"].includes(r.kind)),
       education: f.education, institution: f.institution, occupation: f.occupation, workplace: f.workplace, achievements: f.achievements,
       biography: f.biography, personality: f.personality, memories: f.memories,
       sourceKind: f.sourceKind, sourceTitle: f.sourceTitle, informant: f.informant,
@@ -80,17 +91,38 @@ export default function PersonForm({ id, onDone, onCancel }: { id?: string; onDo
     try { const nid = savePerson(db, inp); reload(); onDone(nid); }
     catch (e) { setErr(explainError(e)); window.scrollTo({ top: 0, behavior: "smooth" }); }
   };
-  const select = (v: string, on: (v: string) => void, label: string) => (
-    <select value={v} onChange={(e) => on(e.target.value)}>
-      <option value="">{label}</option>
-      {others.map((p) => <option key={p.id} value={p.id}>{p.name}{p.birthYear ? ` (${p.birthYear})` : ""}</option>)}
-    </select>
-  );
+  const cands = (k: RelKind) => {
+    const want = REL_OPTIONS.find((o) => o[0] === k)?.[2] ?? null;
+    return others.filter((p) => !want || p.sex === want || p.sex === "unknown" || p.sex === "other");
+  };
+  const setRel = (i: number, p: Partial<RelIn>) => up({ rels: f.rels.map((r, j) => (j === i ? { ...r, ...p } : r)) });
+  const hasParent = f.rels.some((r) => r.kind === "father" || r.kind === "mother");
 
   return (
     <section className="form">
       <h1>{id ? "তথ্য সম্পাদনা" : "নতুন সদস্য"}</h1>
       {err && <p className="error" role="alert">{err}</p>}
+
+      <details open><summary>সম্পর্ক যোগ করুন</summary>
+        <p className="muted small">এই ব্যক্তির সঙ্গে কার কী সম্পর্ক, বেছে নিন। একাধিক যোগ করা যায়। না জানলে ফাঁকা রাখুন।</p>
+        {others.length === 0 && <p className="muted small">এখনো অন্য কোনো সদস্য নেই। আগে সদস্য যোগ করুন, তারপর সম্পর্ক জুড়বেন।</p>}
+        {f.rels.map((r, i) => (
+          <div className="relrow" key={i}>
+            <select aria-label="সম্পর্ক" value={r.kind} onChange={(e) => { const k = e.target.value as RelKind; setRel(i, { kind: k, otherId: cands(k).some((p) => p.id === r.otherId) ? r.otherId : "" }); }}>
+              {REL_OPTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+            <select aria-label="সদস্য" value={r.otherId} onChange={(e) => setRel(i, { otherId: e.target.value })}>
+              <option value="">— সদস্য বাছুন —</option>
+              {cands(r.kind).map((p) => <option key={p.id} value={p.id}>{p.name}{p.birthYear ? ` (${p.birthYear})` : ""}</option>)}
+            </select>
+            <button type="button" className="relx" aria-label="সরান" onClick={() => up({ rels: f.rels.filter((_, j) => j !== i) })}>✕</button>
+          </div>
+        ))}
+        {others.length > 0 && <button type="button" className="btn" onClick={() => up({ rels: [...f.rels, { kind: "father", otherId: "" }] })}>＋ আরেকটি সম্পর্ক যোগ করুন</button>}
+        {hasParent && <div className="field"><span>বাবা-মায়ের সঙ্গে সম্পর্কের ধরন</span>
+          <Chips value={f.parentKind} options={[["biological", "জৈবিক"], ["adoptive", "দত্তক"], ["step", "সৎ"], ["foster", "পালক"]]} onChange={(v) => up({ parentKind: v })} /></div>}
+        <p className="muted small">একই সম্পর্ক বারবার দিলেও একটিই রেখা আঁকা হয়। ভাই, বোন, দাদা, নানা ইত্যাদি যোগ হয়ে গেলে পরে বদলাতে সংশ্লিষ্ট সদস্যের তথ্যে যান।</p>
+      </details>
 
       <details open><summary>মৌলিক পরিচয়</summary>
         <Field label="নাম (বাংলা)"><input value={f.nameBn} onChange={(e) => up({ nameBn: e.target.value })} /></Field>
@@ -111,19 +143,6 @@ export default function PersonForm({ id, onDone, onCancel }: { id?: string; onDo
           <DateFields q={f.dq} y={f.dy} m={f.dm} d={f.dd} set={(p) => up({ ...(p.q && { dq: p.q }), ...(p.y !== undefined && { dy: p.y }), ...(p.m !== undefined && { dm: p.m }), ...(p.d !== undefined && { dd: p.d }) })} />
           <Field label="মৃত্যুস্থান"><input value={f.deathPlace} onChange={(e) => up({ deathPlace: e.target.value })} /></Field>
         </>}
-      </details>
-
-      <details open><summary>পরিবার</summary>
-        <Field label="বাবা" hint="তালিকায় না থাকলে আগে বাবাকে সদস্য হিসেবে যোগ করুন। না জানলে ফাঁকা রাখুন।">{select(f.fatherId, (v) => up({ fatherId: v }), "অজানা")}</Field>
-        <Field label="মা">{select(f.motherId, (v) => up({ motherId: v }), "অজানা")}</Field>
-        <div className="field"><span>বাবা-মায়ের সঙ্গে সম্পর্কের ধরন</span>
-          <Chips value={f.parentKind} options={[["biological", "জৈবিক"], ["adoptive", "দত্তক"], ["step", "সৎ"], ["foster", "পালক"]]} onChange={(v) => up({ parentKind: v })} /></div>
-        <div className="field"><span>স্বামী/স্ত্রী (একাধিক হতে পারে)</span>
-          {others.length === 0 && <small>এখনো অন্য কোনো সদস্য নেই।</small>}
-          {others.map((p) => (
-            <label className="check" key={p.id}><input type="checkbox" checked={f.spouseIds.includes(p.id)}
-              onChange={(e) => up({ spouseIds: e.target.checked ? [...f.spouseIds, p.id] : f.spouseIds.filter((x) => x !== p.id) })} /> {p.name}</label>
-          ))}</div>
       </details>
 
       <details><summary>শিক্ষা ও পেশা</summary>

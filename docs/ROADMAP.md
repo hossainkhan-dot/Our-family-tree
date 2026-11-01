@@ -12,6 +12,8 @@ Rule: কোড পাবলিক হতে পারে, আসল পার�
 - [ ] ধাপ ৭ – Google লগইন, Role, ২–৩ জনের অনুমোদন, History
 - [x] ধাপ ৮ – ব্যাকআপ, JSON/GEDCOM 5.5.1, Restore (src/db/backup.ts, gedcom.ts, snapshots.ts, components/Backup.tsx; tests/backup.test.ts পাস)
   - [x] ৮ক – ZIP ব্যাকআপ প্যাকেজ (data.json + GEDCOM + README + SHA-256 চেকসাম, src/db/zip.ts, package.ts), যাচাইসহ Restore, ব্যাকআপের খাতা; tests/package.test.ts পাস
+  - [x] ৫ক – সম্পর্ক বাছাই (বাবা, মা, ভাই, বোন, দাদা-দাদি, নানা-নানী, সন্তান, স্বামী/স্ত্রী; একাধিক), একই সম্পর্কে একটিই রেখা; tests/relations_add.test.ts পাস
+  - [x] ফোনের ব্যাক বাটন: পপআপ বন্ধ > আগের স্ক্রিন > হোম > "আবার চাপলে বের হবে" (@capacitor/app)
   - [ ] ৮খ – Google Drive অটো-ব্যাকআপ ও অন্য Drive অ্যাকাউন্টে কপি (ধাপ ৭-এর Google OAuth শেষ হলে; তার আগে ZIP শেয়ার-শিট দিয়ে যেকোনো Drive-এ রাখা যায়)
 - [ ] ধাপ ৯ – মিডিয়া, টাইমলাইন, ম্যাপ, সার্চ, ড্যাশবোর্ড
 - [ ] ধাপ ১০ – Legacy Transfer, Time Capsule, Knowledge AI, Cinematic View

@@ -8,6 +8,7 @@ import { addLog, buildPackage, readLog, readPackage } from "../db/package";
 import { loadData } from "../db/repo";
 import { saveOrShare, saveOrShareBytes } from "../db/share";
 import { isZip } from "../db/zip";
+import { useBack } from "../core/back";
 import { listSnapshots, putSnapshot, snapshotBackup, type Snapshot } from "../db/snapshots";
 
 const day = () => new Date().toISOString().slice(0, 10);
@@ -20,6 +21,7 @@ export default function Backup() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
+  useBack(!!pending, () => setPending(null));
   const [snaps, setSnaps] = useState<Snapshot[]>([]);
   const refreshSnaps = () => listSnapshots().then(setSnaps).catch(() => setSnaps([]));
   useEffect(() => { void refreshSnaps(); }, []);

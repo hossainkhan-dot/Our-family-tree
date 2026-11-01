@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, type PointerEvent as PE, type WheelEvent as 
 import { buildGraph, focusSet, relation, toBn, type Data, type P } from "../core/relations";
 import { useDb } from "../db/DbContext";
 import { SAMPLE, SAMPLE_EGO } from "../core/sample";
+import { useBack } from "../core/back";
 
 const VBW = 360, VBH = 500, CX = 180, SP = 78;
 const ROW = { gp: 70, par: 190, me: 310, kid: 430 };
@@ -28,6 +29,7 @@ const years = (p: P) =>
 export default function TreeScreen({ onAdd, onOpenProfile }: { onAdd: () => void; onOpenProfile: (id: string) => void }) {
   const { data, ego } = useDb();
   const [sample, setSample] = useState(false);
+  useBack(sample, () => setSample(false));
   if (sample) return <Canvas data={SAMPLE} startEgo={SAMPLE_EGO} meId={SAMPLE_EGO} badge="নমুনা পরিবার" onBack={() => setSample(false)} />;
   if (data.people.length === 0) {
     return (
@@ -51,6 +53,7 @@ function Canvas({ data, startEgo, meId, badge, onBack, onOpenProfile }:
   const [egoState, setEgo] = useState(startEgo);
   const ego = g.byId.has(egoState) ? egoState : startEgo;
   const [sel, setSel] = useState<string | null>(null);
+  useBack(!!sel, () => setSel(null));
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const svgRef = useRef<SVGSVGElement>(null);
   const ptrs = useRef(new Map<number, { x: number; y: number }>());
@@ -61,6 +64,7 @@ function Canvas({ data, startEgo, meId, badge, onBack, onOpenProfile }:
   const { nodes, pos } = useMemo(() => {
     const nodes: N[] = [], pos = new Map<string, { x: number; y: number }>();
     const add = (id: string | null, x: number, y: number, slot: Slot, child?: string) => {
+      if (id && pos.has(id)) return;   // a person is drawn once, however many ways they are related
       nodes.push({ id, x, y, slot, child });
       if (id) pos.set(id, { x, y });
     };
@@ -123,6 +127,8 @@ function Canvas({ data, startEgo, meId, badge, onBack, onOpenProfile }:
   if (sel && !g.byId.has(sel)) setSel(null);
   const label = (id: string) => (id === ego ? (ego === meId ? "আপনি" : "কেন্দ্র") : relation(g, ego, id) ?? "সম্পর্ক অজানা");
   const selP = sel ? person(sel) : null;
+  const drawn = new Set<string>();
+  const once = (k: string) => (drawn.has(k) ? false : (drawn.add(k), true));
 
   return (
     <section className="treebox-wrap">
@@ -142,14 +148,14 @@ function Canvas({ data, startEgo, meId, badge, onBack, onOpenProfile }:
               }
               return (g.parents.get(n.id) ?? []).map((e) => {
                 const p = pos.get(e.parent);
-                if (!p) return null;
+                if (!p || !once(`${e.parent}>${n.id}`)) return null;
                 const m = (p.y + n.y) / 2;
                 return <path key={`${e.parent}-${n.id}`} className="tree-line" d={`M${p.x} ${p.y + 26}C${p.x} ${m},${n.x} ${m},${n.x} ${n.y - 26}`} />;
               });
             })}
             {data.unions.map((u) => {
               const a = pos.get(u.a), b = pos.get(u.b);
-              return a && b && a.y === b.y ? <path key={u.a + u.b} className="tree-line" d={`M${a.x + 26} ${a.y}L${b.x - 26} ${b.y}`} /> : null;
+              return a && b && a.y === b.y && once([u.a, u.b].sort().join("+")) ? <path key={u.a + u.b} className="tree-line" d={`M${a.x + 26} ${a.y}L${b.x - 26} ${b.y}`} /> : null;
             })}
             {nodes.map((n, i) => {
               if (!n.id) {

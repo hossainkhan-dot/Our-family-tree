@@ -3,6 +3,7 @@ import { buildGraph, focusSet, relation, toBn, type P } from "../core/relations"
 import { useDb } from "../db/DbContext";
 import { deletePerson, formatDate, getProfile, setEgo } from "../db/repo";
 import PersonForm from "./PersonForm";
+import { useBack } from "../core/back";
 
 export type PeopleView = { mode: "list" } | { mode: "form"; id?: string } | { mode: "profile"; id: string };
 const STATUS: Record<string, string> = { verified: "যাচাইকৃত", unverified: "অযাচাইকৃত", estimated: "আনুমানিক", unknown: "অজানা" };
@@ -52,6 +53,7 @@ function Profile({ id, setView }: { id: string; setView: (v: PeopleView) => void
   const g = useMemo(() => buildGraph(data), [data]);
   const p = useMemo(() => getProfile(db, id), [db, id, data]);
   const [confirm, setConfirm] = useState(false);
+  useBack(confirm, () => setConfirm(false));
   if (!p) return <section className="panel"><p className="muted">এই সদস্যকে পাওয়া যায়নি।</p><button className="btn" onClick={() => setView({ mode: "list" })}>তালিকায় ফিরুন</button></section>;
   const name = (x: string) => g.byId.get(x)?.name ?? "অজানা";
   const link = (x: string) => <button key={x} className="link" onClick={() => setView({ mode: "profile", id: x })}>{name(x)}</button>;

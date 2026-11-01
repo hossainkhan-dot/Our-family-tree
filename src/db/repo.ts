@@ -6,12 +6,24 @@ export type Qualifier = "unknown" | "exact" | "about" | "before" | "after" | "be
 export interface DateIn { q: Qualifier; y?: number | null; m?: number | null; d?: number | null }
 export type Living = "living" | "deceased" | "unknown";
 
+export type RelKind = "father" | "mother" | "spouse" | "son" | "daughter" | "brother" | "sister" | "gf_p" | "gm_p" | "gf_m" | "gm_m";
+export interface RelIn { kind: RelKind; otherId: string }
+/** [kind, Bangla label, sex the other person should have (if any)] */
+export const REL_OPTIONS: [RelKind, string, Sex | null][] = [
+  ["father", "বাবা", "male"], ["mother", "মা", "female"], ["spouse", "স্বামী/স্ত্রী", null],
+  ["son", "ছেলে", "male"], ["daughter", "মেয়ে", "female"], ["brother", "ভাই", "male"], ["sister", "বোন", "female"],
+  ["gf_p", "দাদা (বাবার বাবা)", "male"], ["gm_p", "দাদি (বাবার মা)", "female"],
+  ["gf_m", "নানা (মায়ের বাবা)", "male"], ["gm_m", "নানী (মায়ের মা)", "female"],
+];
+
 export interface PersonIn {
   id?: string;
   nameBn?: string; nameEn?: string; nickname?: string; title?: string;
   sex: Sex; living: Living; status: Status; isMe?: boolean;
   birth?: DateIn; birthPlace?: string; death?: DateIn; deathPlace?: string;
   fatherId?: string | null; motherId?: string | null; parentKind?: ParentKind; spouseIds?: string[];
+  /** Extra relations (son, daughter, brother, sister, grandparents) that are linked directly on save. Never creates a duplicate link. */
+  relations?: RelIn[];
   education?: string; institution?: string; occupation?: string; workplace?: string; achievements?: string;
   biography?: string; personality?: string; memories?: string;
   sourceKind?: string; sourceTitle?: string; informant?: string;
@@ -62,6 +74,7 @@ export function validate(inp: PersonIn): string | null {
     return "মৃত্যুর সাল জন্মের সালের আগে হতে পারে না।";
   if (inp.id && (inp.fatherId === inp.id || inp.motherId === inp.id || inp.spouseIds?.includes(inp.id)))
     return "কেউ নিজের বাবা, মা বা স্বামী/স্ত্রী হতে পারে না।";
+  if (inp.id && inp.relations?.some((r) => r.otherId === inp.id)) return "কেউ নিজের আত্মীয় হতে পারে না।";
   return null;
 }
 
@@ -140,9 +153,54 @@ export function savePerson(db: Sql, inp: PersonIn): string {
       db.run("INSERT INTO source (id, kind, title, informant, created_by) VALUES (?, ?, ?, ?, ?)", [sid, inp.sourceKind || "other", st, (inp.informant ?? "").trim() || null, ACTOR]);
       db.run("INSERT INTO citation (id, source_id, target_table, target_id, created_by) VALUES (?, ?, 'person', ?, ?)", [uid(), sid, id, ACTOR]);
     }
+    if (inp.relations?.length) applyRelations(db, id, inp);
     if (inp.isMe) setEgo(db, id);
     return id;
   });
+}
+
+const REL_ORDER: Partial<Record<RelKind, number>> = { son: 1, daughter: 1, gf_p: 2, gm_p: 2, gf_m: 2, gm_m: 2, brother: 3, sister: 3 };
+
+/** Links the extra relations. Parents first, then grandparents, siblings last. Existing links are never duplicated; clashes throw a Bangla message. */
+function applyRelations(db: Sql, id: string, inp: PersonIn) {
+  const nm = (x: string) => db.all<{ n: string | null }>("SELECT full_name AS n FROM person_name WHERE person_id = ? AND deleted_at IS NULL ORDER BY is_primary DESC, kind LIMIT 1", [x])[0]?.n ?? "নামহীন";
+  const parentOf = (child: string, role: "father" | "mother") =>
+    db.all<{ parent_id: string }>("SELECT parent_id FROM parent_child WHERE child_id = ? AND parent_role = ? AND deleted_at IS NULL", [child, role])[0]?.parent_id ?? null;
+  const linked = (p: string, c: string) => db.all("SELECT 1 AS x FROM parent_child WHERE parent_id = ? AND child_id = ? AND deleted_at IS NULL", [p, c]).length > 0;
+  const link = (parent: string, child: string, role: "father" | "mother") => {
+    if (parent === child) throw new Error("কেউ নিজের আত্মীয় হতে পারে না।");
+    if (linked(parent, child)) return;
+    const cur = parentOf(child, role);
+    if (cur && cur !== parent) throw new Error(`${nm(child)}-এর ${role === "father" ? "বাবা" : "মা"} হিসেবে আগে থেকেই ${nm(cur)} আছেন, তাই ${nm(parent)}-কে যোগ করা গেল না।`);
+    if (wouldCreateCycle(buildGraph(loadData(db)), parent, child)) throw new Error("CYCLE");
+    db.run("INSERT INTO parent_child (id, parent_id, child_id, kind, parent_role, status, created_by) VALUES (?, ?, ?, 'biological', ?, ?, ?)", [uid(), parent, child, role, inp.status, ACTOR]);
+  };
+  const seen = new Set<string>();
+  const rels = (inp.relations ?? []).filter((r) => r.otherId && r.otherId !== id && REL_ORDER[r.kind])
+    .sort((a, b) => REL_ORDER[a.kind]! - REL_ORDER[b.kind]!);
+  for (const r of rels) {
+    const key = `${r.kind}:${r.otherId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const x = r.otherId;
+    if (r.kind === "son" || r.kind === "daughter") {
+      const role = inp.sex === "male" ? "father" : inp.sex === "female" ? "mother" : null;
+      if (!role) throw new Error("ছেলে/মেয়ে যোগ করতে আগে এই ব্যক্তির লিঙ্গ (পুরুষ বা নারী) বেছে নিন।");
+      link(id, x, role);
+    } else if (r.kind === "brother" || r.kind === "sister") {
+      for (const role of ["father", "mother"] as const) {
+        const a = parentOf(id, role), b = parentOf(x, role);
+        if (a && !b) link(a, x, role); else if (!a && b) link(b, id, role);
+      }
+      const shared = (["father", "mother"] as const).some((role) => { const a = parentOf(id, role); return !!a && a === parentOf(x, role); });
+      if (!shared) throw new Error(`${nm(x)}-কে ভাই/বোন করতে হলে একই বাবা বা মা থাকতে হবে। আগে বাবা বা মা যোগ করুন।`);
+    } else {
+      const viaRole = r.kind.endsWith("_p") ? "father" : "mother";
+      const mid = parentOf(id, viaRole);
+      if (!mid) throw new Error(`${viaRole === "father" ? "দাদা/দাদি" : "নানা/নানী"} যোগ করতে আগে ${viaRole === "father" ? "বাবা" : "মা"} যোগ করুন।`);
+      link(x, mid, r.kind.startsWith("gf") ? "father" : "mother");
+    }
+  }
 }
 
 export function deletePerson(db: Sql, id: string) {
@@ -177,12 +235,14 @@ export function loadData(db: Sql): Data {
   });
   const ids = new Set(people.map((p) => p.id));
   const edges = db.all<{ parent_id: string; child_id: string; kind: ParentKind; parent_role: "father" | "mother" | "parent" }>(
-    "SELECT parent_id, child_id, kind, parent_role FROM parent_child WHERE deleted_at IS NULL")
+    "SELECT parent_id, child_id, kind, parent_role FROM parent_child WHERE deleted_at IS NULL ORDER BY CASE kind WHEN 'biological' THEN 0 ELSE 1 END")
     .filter((e) => ids.has(e.parent_id) && ids.has(e.child_id))
+    .filter((e, i, all) => all.findIndex((x) => x.parent_id === e.parent_id && x.child_id === e.child_id) === i)   // one line per parent-child pair
     .map((e) => ({ parent: e.parent_id, child: e.child_id, kind: e.kind, role: e.parent_role }));
   const unions = db.all<{ a: string; b: string }>(
     "SELECT partner1_id AS a, partner2_id AS b FROM family_union WHERE deleted_at IS NULL AND partner1_id IS NOT NULL AND partner2_id IS NOT NULL")
-    .filter((u) => ids.has(u.a) && ids.has(u.b));
+    .filter((u) => ids.has(u.a) && ids.has(u.b))
+    .filter((u, i, all) => all.findIndex((x) => (x.a === u.a && x.b === u.b) || (x.a === u.b && x.b === u.a)) === i);   // one line per couple
   return { people, edges, unions };
 }
 
