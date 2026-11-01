@@ -5,6 +5,7 @@ import { CloudError, needsReauth } from "../cloud/errors";
 import type { DeviceCode } from "../cloud/google";
 import { autoRun, onAuthIssue, openDrive, runEnter, signIn, signOut } from "../cloud/runtime";
 import { loadConfig, loadSession, saveConfig } from "../cloud/store";
+import { nativeAvailable } from "../cloud/native";
 
 type Phase = "boot" | "open" | "consent" | "device" | "working" | "choose" | "locked";
 export const RECHECK = "fla-cloud-recheck";
@@ -20,12 +21,14 @@ export default function Gate({ children }: { children: ReactNode }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [agree, setAgree] = useState(false);
   const [code, setCode] = useState<DeviceCode | null>(null);
+  const [wid, setWid] = useState(""), [hasId, setHasId] = useState(true);
   const [need, setNeed] = useState<"create" | "join" | null>(null);
   const abort = useRef({ aborted: false });
 
   const check = useCallback(async () => {
     const { db } = live.current;
     const cfg = await loadConfig();
+    setHasId(!nativeAvailable() || !!cfg.webClientId || !!cfg.clientId);
     if (!cfg.enforced) { setPhase("open"); return; }
     const s = await loadSession("primary");
     if (!s) { setPhase("consent"); return; }
@@ -66,7 +69,7 @@ export default function Gate({ children }: { children: ReactNode }) {
     }
   };
   const start = async () => {
-    setPhase("device"); setMsg(null); abort.current = { aborted: false };
+    setPhase("device"); setMsg(null); setCode(null); abort.current = { aborted: false };
     try { await signIn("primary", setCode, abort.current); await enter("auto"); }
     catch (e) { setMsg(e instanceof Error ? e.message : String(e)); setPhase("consent"); }
   };
@@ -91,9 +94,13 @@ export default function Gate({ children }: { children: ReactNode }) {
           <p>আপনার Google Password অ্যাপ সংরক্ষণ করবে না।</p>
           <p>আপনি কেবল Family Tree-এর তথ্য সংরক্ষণ, Synchronization এবং পারিবারিক তথ্য শেয়ার করার জন্য প্রয়োজনীয় Permission প্রদান করছেন।</p>
           <label className="check"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> আমি Privacy Policy ও Data Sharing Policy পড়েছি এবং সম্মতি দিচ্ছি।</label>
+          {!hasId && (
+            <div className="field"><input placeholder="Google Web Client ID (একবারই)" value={wid} onChange={(e) => setWid(e.target.value)} autoCapitalize="off" autoCorrect="off" />
+              <small>এটি অ্যাপে বসানো থাকলে আর লাগে না। docs/GOOGLE_SETUP.md দেখুন।</small></div>
+          )}
           {msg && <p className="error" role="alert">{msg}</p>}
           <div className="row">
-            <button className="btn btn-primary" disabled={!agree} onClick={() => void start()}>Continue with Google &amp; Drive Permission</button>
+            <button className="btn btn-primary" disabled={!agree || (!hasId && !wid.trim())} onClick={() => void (async () => { if (!hasId) { await saveConfig({ webClientId: wid.trim() }); setHasId(true); } await start(); })()}>Continue with Google &amp; Drive Permission</button>
             <button className="btn" onClick={() => { setPhase("locked"); setMsg(null); }}>Cancel</button>
           </div>
           <p className="muted small">এরপর Google-এর নিজস্ব অনুমতি-পর্দা দেখাবে। সেখানে Drive-এর অনুমতির বাক্সটিও টিক দিতে হবে।</p>
@@ -103,7 +110,7 @@ export default function Gate({ children }: { children: ReactNode }) {
       {phase === "device" && (
         <>
           <h1 id="gate-title">Google-এ অনুমতি দিন</h1>
-          {!code ? <p className="muted">Google-এর সঙ্গে সংযোগ হচ্ছে…</p> : (
+          {!code ? <p className="muted">Google-এর পর্দায় Gmail বেছে নিন এবং Drive-এর অনুমতি দিন…</p> : (
             <>
               <p>১. নিচের ঠিকানা খুলুন (এই ফোনে বা অন্য যেকোনো ডিভাইসে):</p>
               <p><a className="btn" href={code.verificationUrl} target="_blank" rel="noopener noreferrer">{code.verificationUrl}</a></p>

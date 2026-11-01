@@ -23,12 +23,12 @@ export default function CloudPanel({ onPickBytes }: { onPickBytes: (name: string
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState<DeviceCode | null>(null);
-  const [cid, setCid] = useState(""), [sec, setSec] = useState("");
+  const [cid, setCid] = useState("");
   const [list, setList] = useState<DriveBackupItem[] | null>(null);
   const [shareTo, setShareTo] = useState(""), [listFor, setListFor] = useState<"primary" | "mirror">("primary");
   const actor = currentMember(db);
 
-  const refresh = async () => { const c = await loadConfig(); setCfg(c); setCid(c.clientId); setSec(c.clientSecret); setMe(await loadSession("primary")); setMirror(await loadSession("mirror")); setSt(await syncStore.load()); };
+  const refresh = async () => { const c = await loadConfig(); setCfg(c); setCid(c.webClientId); setMe(await loadSession("primary")); setMirror(await loadSession("mirror")); setSt(await syncStore.load()); };
   useEffect(() => { void refresh(); }, []);
   const run = async (fn: () => Promise<string>) => {
     setBusy(true); setMsg(null);
@@ -36,9 +36,8 @@ export default function CloudPanel({ onPickBytes }: { onPickBytes: (name: string
     finally { setBusy(false); setCode(null); void refresh(); }
   };
   if (!cfg) return null;
-  const setupDone = !!cfg.clientId && !!cfg.clientSecret;
+  const setupDone = !!cfg.webClientId || (!!cfg.clientId && !!cfg.clientSecret);
 
-  const saveIds = () => run(async () => { await saveConfig({ clientId: cid.trim(), clientSecret: sec.trim() }); return "Google সেটিং সংরক্ষিত হয়েছে।"; });
   const enable = () => run(async () => { await saveConfig({ enforced: true }); window.dispatchEvent(new Event(RECHECK)); return "Google লগইন চালু হয়েছে।"; });
   const addMirror = () => run(async () => { const s = await signIn("mirror", setCode, { aborted: false }); return `${s.email} যুক্ত হয়েছে। এখন থেকে ব্যাকআপের একটি কপি ওই Drive-এও যাবে।`; });
   const sync = () => run(async () => {
@@ -85,10 +84,9 @@ export default function CloudPanel({ onPickBytes }: { onPickBytes: (name: string
       {!setupDone && (
         <div className="card">
           <p><b>প্রথমে Google সেটআপ</b></p>
-          <p className="muted small">একবার Google Cloud-এ বিনামূল্যে প্রকল্প খুলে OAuth Client (ধরন: "TVs and Limited Input devices") বানাতে হবে। ধাপগুলো docs/GOOGLE_SETUP.md-তে লেখা আছে।</p>
-          <div className="field"><input placeholder="Client ID" value={cid} onChange={(e) => setCid(e.target.value)} autoCapitalize="off" autoCorrect="off" /></div>
-          <div className="field"><input placeholder="Client Secret" value={sec} onChange={(e) => setSec(e.target.value)} autoCapitalize="off" autoCorrect="off" /></div>
-          <button className="btn btn-primary" disabled={busy || !cid.trim() || !sec.trim()} onClick={() => void saveIds()}>সংরক্ষণ</button>
+          <p className="muted small">একবার Google Cloud-এ বিনামূল্যে প্রকল্প খুলে "Web application" Client ID বানাতে হবে (docs/GOOGLE_SETUP.md)। ID অ্যাপের কোডে বসানো থাকলে এটি আর দেখাবে না।</p>
+          <div className="field"><input placeholder="Web Client ID" value={cid} onChange={(e) => setCid(e.target.value)} autoCapitalize="off" autoCorrect="off" /></div>
+          <button className="btn btn-primary" disabled={busy || !cid.trim()} onClick={() => void run(async () => { await saveConfig({ webClientId: cid.trim() }); return "Google সেটিং সংরক্ষিত হয়েছে।"; })}>সংরক্ষণ</button>
         </div>
       )}
 

@@ -1,19 +1,13 @@
-# Google সেটআপ (একবারই, বিনামূল্যে)
+# Google সেটআপ (একবারই, বিনামূল্যে) — এক-ট্যাপ লগইন
 
-অ্যাপ Google লগইন ও Drive-এর জন্য "Device flow" ব্যবহার করে: অ্যাপ একটি কোড দেখায়, আপনি google.com/device-এ কোড দিয়ে Google-এর আসল অনুমতি-পর্দায় অনুমতি দেন। কোনো প্লাগইন বা রিডাইরেক্ট লাগে না।
+অ্যাপ খুললেই Google লগইন আসবে; Gmail বাছলে Drive-এর অনুমতিও একই Google পর্দায় চাওয়া হবে (কোড লেখা লাগে না)।
 
 ## ধাপ
-1. console.cloud.google.com → নতুন Project (নাম: Family Legacy Archive)।
+1. console.cloud.google.com → নতুন Project।
 2. APIs & Services → Library → **Google Drive API** → Enable।
-3. APIs & Services → **OAuth consent screen**: User type = External; অ্যাপের নাম, আপনার ইমেইল দিন।
-   - Scopes: `openid`, `email`, `profile`, `.../auth/drive.file` (শুধু এই Drive স্কোপ; এটি "non-sensitive", Google-এর ভেরিফিকেশন লাগে না)।
-   - **Publishing status = "In production"** করুন। "Testing" অবস্থায় Google প্রতি ৭ দিনে লগইন মুছে দেয়।
-   - প্রথমবার Google "unverified app" সতর্কতা দেখাতে পারে: Advanced → Continue।
-4. Credentials → Create credentials → OAuth client ID → Application type = **TVs and Limited Input devices**।
-5. যে Client ID ও Client Secret আসবে সেগুলো অ্যাপে: ব্যাকআপ ট্যাব → "Google Drive: ব্যাকআপ ও সিঙ্ক" → সংরক্ষণ।
-   - এগুলো রিপোতে বা কোডে রাখবেন না (পাবলিক রিপো)। প্রতিটি সদস্যের ফোনে একবার বসাতে হবে।
-6. "Google লগইন চালু করুন" চাপুন → গোপনীয়তা-সম্মতি → কোড → Google পর্দায় Gmail ও **Drive-এর বাক্স টিক** দিন।
-
-## সীমা (সৎভাবে)
-- Drive স্কোপ `drive.file`: অ্যাপ শুধু নিজের তৈরি/খোলা ফাইলই দেখে; আপনার অন্য কোনো ফাইল দেখে না।
-- Google বিনামূল্যে নীতি ও কোটা বদলাতে পারে; তাই ফাইল-ব্যাকআপ (ZIP) আলাদা রাখা চলবে।
+3. **OAuth consent screen**: External; অ্যাপের নাম ও ইমেইল। Scopes: `email`, `profile`, `openid`, `.../auth/drive.file`। **Publishing status = "In production"** (Testing থাকলে প্রতি ৭ দিনে লগইন মুছে যায়)। প্রথমবার "unverified app" সতর্কতা এলে Advanced → Continue।
+4. Credentials → OAuth client ID → **Android**:
+   - Package name: `com.hossainkhan.familytree`
+   - SHA-1: `3D:C5:2D:28:77:39:2C:C9:DA:97:F9:33:F0:B9:60:30:D8:56:74:BC` (signing/release.keystore-এর)
+5. Credentials → OAuth client ID → **Web application** (নাম যেকোনো) → এর **Client ID** কপি করুন।
+6. সেই Web Client ID আমাকে দিন; আমি `src/cloud/baked.ts`-এ বসিয়ে দেব। (বিকল্প: অ্যাপের লগইন-পর্দার ঘরে একবার লিখুন।)

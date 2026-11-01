@@ -5,6 +5,7 @@ import { DriveClient } from "./drive";
 import { CloudError, needsReauth } from "./errors";
 import { getIdentity, pollDeviceFlow, revokeToken, startDeviceFlow, verifyDriveScope, type DeviceCode } from "./google";
 import { authFetch } from "./net";
+import { nativeAvailable, nativeLogin } from "./native";
 import { TokenSource, type StoredSession } from "./session";
 import { clearSession, loadConfig, loadSession, saveConfig, saveSession, syncStore, type Which } from "./store";
 import { enterFamily, resolveConflict, syncNow, type Ctx, type JoinMode, type SyncResult } from "./sync";
@@ -17,14 +18,24 @@ const raise = (r: string) => listeners.forEach((l) => l(r));
 
 export async function openDrive(which: Which = "primary"): Promise<{ drive: DriveClient; tok: TokenSource; session: StoredSession } | null> {
   const cfg = await loadConfig(), session = await loadSession(which);
-  if (!session || !cfg.clientId) return null;
-  const tok = new TokenSource(cfg, session, authFetch, Date.now, () => raise(which === "primary" ? "Drive-এর অনুমতি আর নেই। আবার অনুমতি দিন।" : "দ্বিতীয় Drive অ্যাকাউন্টের অনুমতি আর নেই।"));
+  if (!session || (!session.native && !cfg.clientId)) return null;
+  const refresher = session.native ? async () => { const t = await nativeLogin(cfg.webClientId); const id = await getIdentity(t.accessToken, authFetch); if (id.email !== session.email) throw new CloudError("denied", "অন্য Gmail বাছা হয়েছে। এই অ্যাকাউন্টের Gmail-ই বাছুন।"); return t; } : undefined;
+  const tok = new TokenSource(cfg, session, authFetch, Date.now, () => raise(which === "primary" ? "Drive-এর অনুমতি আর নেই। আবার অনুমতি দিন।" : "দ্বিতীয় Drive অ্যাকাউন্টের অনুমতি আর নেই।"), refresher);
   return { drive: new DriveClient(tok), tok, session };
 }
 
 /** ধাপ ১–৫: Google অ্যাকাউন্ট বাছাই → পরিচয় যাচাই → Drive অনুমতি (Google-এর আসল পর্দায়) → অনুমতি সত্যিই এসেছে কিনা যাচাই। */
 export async function signIn(which: Which, onCode: (d: DeviceCode) => void, signal: { aborted: boolean }): Promise<StoredSession> {
   const cfg = await loadConfig();
+  if (nativeAvailable() && cfg.webClientId) {      // এক ট্যাপ: Gmail + Drive অনুমতি একই Google পর্দায়
+    const t = await nativeLogin(cfg.webClientId);
+    const scopes = await verifyDriveScope(t.accessToken, authFetch);   // Google-কে জিজ্ঞেস করে আসল অনুমতি নিশ্চিত
+    const id = await getIdentity(t.accessToken, authFetch);
+    const s: StoredSession = { email: id.email, sub: id.sub, name: id.name, refreshToken: "", scopes, connectedAt: new Date().toISOString(), native: true };
+    if (which === "mirror") { const p = await loadSession("primary"); if (p && p.email === s.email) throw new CloudError("config", "ব্যাকআপ-কপির জন্য মূল অ্যাকাউন্ট থেকে আলাদা একটি Gmail বেছে নিন।"); }
+    await saveSession(which, s);
+    return s;
+  }
   const dc = await startDeviceFlow(cfg, authFetch);
   onCode(dc);
   const t = await pollDeviceFlow(cfg, dc, { fetch: authFetch, signal });
@@ -41,7 +52,7 @@ export async function signIn(which: Which, onCode: (d: DeviceCode) => void, sign
 }
 export async function signOut(which: Which): Promise<void> {
   const s = await loadSession(which);
-  if (s) await revokeToken(s.refreshToken, authFetch);
+  if (s?.refreshToken) await revokeToken(s.refreshToken, authFetch);
   await clearSession(which);
 }
 
