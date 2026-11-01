@@ -2,6 +2,8 @@
 export interface Sql {
   run(sql: string, params?: unknown[]): void;
   all<T = Record<string, unknown>>(sql: string, params?: unknown[]): T[];
+  /** Replace the whole database with a fresh, migrated, empty one (used only by restore). */
+  reset?: () => void;
 }
 
 export function tx<T>(db: Sql, fn: () => T): T {

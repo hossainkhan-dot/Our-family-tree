@@ -10,11 +10,11 @@ Rule: কোড পাবলিক হতে পারে, আসল পার�
 - [x] ধাপ ৫ – প্রোফাইল ও ফর্ম (src/db/repo.ts + sql.js + IndexedDB; src/components/PersonForm.tsx, People.tsx; repo টেস্ট পাস)
 - [x] ধাপ ৬ – ট্রি ভিউ (ফোকাস ক্যানভাস, জুম/পান, silhouette; আসল ডেটায় সংযুক্ত। বাকি: Expand/Collapse, Compact/Portrait/Cinematic মোড)
 - [ ] ধাপ ৭ – Google লগইন, Role, ২–৩ জনের অনুমোদন, History
-- [ ] ধাপ ৮ – ব্যাকআপ, JSON/GEDCOM, Restore
+- [x] ধাপ ৮ – ব্যাকআপ, JSON/GEDCOM 5.5.1, Restore (src/db/backup.ts, gedcom.ts, snapshots.ts, components/Backup.tsx; tests/backup.test.ts পাস)
 - [ ] ধাপ ৯ – মিডিয়া, টাইমলাইন, ম্যাপ, সার্চ, ড্যাশবোর্ড
 - [ ] ধাপ ১০ – Legacy Transfer, Time Capsule, Knowledge AI, Cinematic View
 
-অগ্রগতি: ৬/১০
+অগ্রগতি: ৭/১০ (ধাপ ১-৬, ৮ সম্পন্ন; ৭, ৯, ১০ বাকি)
 - [x] APK বিল্ড: GitHub Actions → Artifacts → family-tree-apk
 
 ## আপডেট নিয়ম (গুরুত্বপূর্ণ)

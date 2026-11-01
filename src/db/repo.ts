@@ -237,3 +237,29 @@ export function explainError(e: unknown): string {
   if (/[\u0980-\u09FF]/.test(m)) return m;
   return `সংরক্ষণ করা যায়নি: ${m}`;
 }
+
+// ---- small helpers used by import/restore and app settings ----
+export function getMeta(db: Sql, key: string): string | null {
+  return db.all<{ value: string }>("SELECT value FROM app_context WHERE key = ?", [key])[0]?.value ?? null;
+}
+export function setMeta(db: Sql, key: string, value: string) { db.run("INSERT OR REPLACE INTO app_context (key, value) VALUES (?, ?)", [key, value]); }
+
+export function linkParent(db: Sql, child: string, parent: string, role: "father" | "mother", kind: ParentKind = "biological", status: Status = "unverified") {
+  tx(db, () => {
+    if (wouldCreateCycle(buildGraph(loadData(db)), parent, child)) throw new Error("CYCLE");
+    db.run("INSERT INTO parent_child (id, parent_id, child_id, kind, parent_role, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)", [uid(), parent, child, kind, role, status, ACTOR]);
+  });
+}
+export function linkSpouse(db: Sql, a: string, b: string, status: Status = "unverified") {
+  if (a === b) return;
+  const has = db.all("SELECT id FROM family_union WHERE deleted_at IS NULL AND ((partner1_id = ? AND partner2_id = ?) OR (partner1_id = ? AND partner2_id = ?))", [a, b, b, a]);
+  if (!has.length) db.run("INSERT INTO family_union (id, partner1_id, partner2_id, kind, status, created_by) VALUES (?, ?, ?, 'marriage', ?, ?)", [uid(), a, b, status, ACTOR]);
+}
+
+export function addSource(db: Sql, personId: string, kind: string, title: string, informant?: string | null) {
+  tx(db, () => {
+    const sid = uid();
+    db.run("INSERT INTO source (id, kind, title, informant, created_by) VALUES (?, ?, ?, ?, ?)", [sid, kind, title, informant || null, ACTOR]);
+    db.run("INSERT INTO citation (id, source_id, target_table, target_id, created_by) VALUES (?, ?, 'person', ?, ?)", [uid(), sid, personId, ACTOR]);
+  });
+}

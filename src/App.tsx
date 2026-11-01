@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import Funnel from "./components/Funnel";
 import TreeScreen from "./components/TreeView";
 import People, { type PeopleView } from "./components/People";
+import Backup from "./components/Backup";
 import { useDb } from "./db/DbContext";
 import { ancestorCount, buildGraph, generationLevels, oldestAncestor } from "./core/relations";
 import "./app.css";
 
-type Tab = "home" | "tree" | "people" | "progress";
+type Tab = "home" | "tree" | "people" | "backup" | "progress";
 
 const toBn = (n: number | string) => String(n).replace(/\d/g, (d) => "০১২৩৪৫৬৭৮৯"[Number(d)]);
 
@@ -14,24 +15,27 @@ const ICONS: Record<Tab, string> = {
   home: "M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
   tree: "M12 3v6m0 0c0 3-6 3-6 7m6-7c0 3 6 3 6 7M6 16v3m12-3v3",
   people: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm7 1a2.5 2.5 0 1 0 0-5M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6m1-5.5c2.7 0 5 2 5 5.5",
+  backup: "M12 4v10m0 0l-4-4m4 4l4-4M5 19h14",
   progress: "M5 6h14M5 12h14M5 18h9",
 };
 const TABS: { id: Tab; label: string }[] = [
   { id: "home", label: "হোম" },
   { id: "tree", label: "বংশবৃক্ষ" },
   { id: "people", label: "সদস্য" },
+  { id: "backup", label: "ব্যাকআপ" },
   { id: "progress", label: "অগ্রগতি" },
 ];
 
 const STEPS: [boolean, string][] = [
   [true, "ভিত্তি ও GitHub বিল্ড"], [true, "ডিজাইন সিস্টেম"], [true, "ডেটাবেস স্কিমা"],
   [true, "সম্পর্কের লজিক"], [true, "প্রোফাইল ও ফর্ম"], [true, "ট্রি ভিউ"],
-  [false, "লগইন, Role ও অনুমোদন"], [false, "ব্যাকআপ ও GEDCOM"],
+  [false, "লগইন, Role ও অনুমোদন"], [true, "ব্যাকআপ ও GEDCOM"],
   [false, "মিডিয়া, টাইমলাইন, ম্যাপ, সার্চ"], [false, "Legacy Transfer, Time Capsule, AI"],
 ];
 
-function Home({ onAdd }: { onAdd: () => void }) {
-  const { data, ego } = useDb();
+function Home({ onAdd, onBackup }: { onAdd: () => void; onBackup: () => void }) {
+  const { data, ego, lastExport } = useDb();
+  const stale = data.people.length > 0 && (!lastExport || Date.now() - Date.parse(lastExport) > 7 * 864e5);
   const g = useMemo(() => buildGraph(data), [data]);
   const [sample, setSample] = useState(false);
   const me = ego ?? data.people[0]?.id ?? null;
@@ -48,6 +52,7 @@ function Home({ onAdd }: { onAdd: () => void }) {
   const showReal = !sample && real;
   return (
     <section className="home">
+      {stale && <button className="warn" onClick={onBackup}>⚠ {lastExport ? "৭ দিনের বেশি ব্যাকআপ নেওয়া হয়নি" : "এখনো কোনো ফাইল-ব্যাকআপ নেওয়া হয়নি"}। ফোন হারালে তথ্য যাবে, এখনই ব্যাকআপ নিন →</button>}
       <header className="hero-top">
         <p className="hero-label">{sample ? "১৮৭৬ সাল · নমুনা" : showReal ? (real.year ? `${toBn(real.year)} সাল থেকে` : "আপনার বংশধারা") : "আপনার বংশধারা"}</p>
         <p className="hero-num">{sample ? toBn(32) : toBn(showReal ? real.count : 0)}</p>
@@ -106,9 +111,10 @@ export default function App() {
   return (
     <div className="app">
       <main>
-        {tab === "home" && <Home onAdd={() => go({ mode: "form" })} />}
+        {tab === "home" && <Home onAdd={() => go({ mode: "form" })} onBackup={() => setTab("backup")} />}
         {tab === "tree" && <TreeScreen onAdd={() => go({ mode: "form" })} onOpenProfile={(id) => go({ mode: "profile", id })} />}
         {tab === "people" && <People view={pv} setView={(v) => { setPv(v); window.scrollTo(0, 0); }} />}
+        {tab === "backup" && <Backup />}
         {tab === "progress" && <Progress />}
       </main>
       <nav className="tabbar" aria-label="প্রধান মেনু">

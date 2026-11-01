@@ -7,14 +7,16 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node --import ./tests/register.mjs --experimental-strip-types tests/relations.test.ts && node --import ./tests/register.mjs --experimental-strip-types tests/repo.test.ts"
+    "test": "for t in relations repo backup; do node --import ./tests/register.mjs --experimental-strip-types tests/$t.test.ts || exit 1; done"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "@capacitor/core": "^6.1.2",
     "@capacitor/android": "^6.1.2",
-    "sql.js": "1.10.3"
+    "sql.js": "1.10.3",
+    "@capacitor/filesystem": "^6.0.0",
+    "@capacitor/share": "^6.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",

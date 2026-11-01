@@ -3,39 +3,15 @@ import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import { migrate } from "./migrate";
 import type { Sql } from "./sql";
 
-// The whole database file lives in the phone's IndexedDB. JSON/GEDCOM export (step 8) will add a second copy.
-const IDB_NAME = "family-legacy-archive", STORE = "files", KEY = "main-db";
-
-function idb(): Promise<IDBDatabase> {
-  return new Promise((res, rej) => {
-    const r = indexedDB.open(IDB_NAME, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
-}
-async function loadBytes(): Promise<Uint8Array | null> {
-  const d = await idb();
-  return new Promise((res, rej) => {
-    const q = d.transaction(STORE).objectStore(STORE).get(KEY);
-    q.onsuccess = () => res((q.result as Uint8Array | undefined) ?? null);
-    q.onerror = () => rej(q.error);
-  });
-}
-async function saveBytes(bytes: Uint8Array): Promise<void> {
-  const d = await idb();
-  return new Promise((res, rej) => {
-    const t = d.transaction(STORE, "readwrite");
-    t.objectStore(STORE).put(bytes, KEY);
-    t.oncomplete = () => res();
-    t.onerror = () => rej(t.error);
-  });
-}
+import { FILES, idbGet, idbPut } from "./idb";
+const KEY = "main-db";
+const loadBytes = () => idbGet<Uint8Array>(FILES, KEY);
+const saveBytes = (b: Uint8Array) => idbPut(FILES, KEY, b);
 
 export async function openDb(): Promise<Sql> {
   const SQL = await initSqlJs({ locateFile: () => wasmUrl });
   const bytes = await loadBytes();
-  const raw = new SQL.Database(bytes ?? undefined);
+  let raw = new SQL.Database(bytes ?? undefined);
   let timer: number | undefined;
   const persist = () => {
     window.clearTimeout(timer);
@@ -60,8 +36,9 @@ export async function openDb(): Promise<Sql> {
       } finally { st.free(); }
     },
   };
-  migrate(db);
-  db.run("INSERT OR REPLACE INTO app_context (key, value) VALUES ('actor', 'owner')");
+  const init = () => { raw.run("PRAGMA foreign_keys = ON"); migrate(db); db.run("INSERT OR REPLACE INTO app_context (key, value) VALUES ('actor', 'owner')"); };
+  db.reset = () => { raw.close(); raw = new SQL.Database(); init(); };
+  init();
   try { await navigator.storage?.persist?.(); } catch { /* optional */ }
   return db;
 }
