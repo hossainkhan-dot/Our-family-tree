@@ -49,7 +49,7 @@ function Members({ me, act }: { me: A.Member | null; act: Act }) {
       {!list.length && (
         <div className="card">
           <p><b>মালিক ঠিক করুন</b></p>
-          <p className="muted small">এটি আপনার Gmail। এখন এটি শুধু লিখে রাখা হচ্ছে; Google লগইন যোগ হলে এই Gmail দিয়েই আপনার পরিচয় যাচাই হবে।</p>
+          <p className="muted small">এটি আপনার Gmail। Google লগইন চালু করলে (ব্যাকআপ ট্যাব) এই Gmail দিয়েই আপনার পরিচয় যাচাই হবে।</p>
           <div className="field"><input type="email" placeholder="আপনার Gmail" value={oe} onChange={(e) => setOe(e.target.value)} /></div>
           <div className="field"><input placeholder="আপনার নাম" value={on} onChange={(e) => setOn(e.target.value)} /></div>
           <button className="btn btn-primary" onClick={() => act(() => { A.ensureOwner(db, oe, on); return "মালিক ঠিক হয়েছে।"; })}>নিশ্চিত করুন</button>
@@ -117,7 +117,7 @@ function Approvals({ me, act }: { me: A.Member | null; act: Act }) {
       })}
       {done.length > 0 && <><h2 className="sec">সাম্প্রতিক সিদ্ধান্ত</h2>
         <div className="list">{done.map((r) => <div className="snap" key={r.id}><div><b>{r.summary}</b><br /><span className="muted small">{REQ_BN[r.status] ?? r.status} · {r.submitter}{r.error ? ` · ${r.error}` : ""}</span></div></div>)}</div></>}
-      <p className="muted small">অন্য সদস্যদের ভোট আপনার ফোনে আসতে Google লগইন ও শেয়ার্ড Drive সিঙ্ক লাগবে (পরের ধাপ)। তার আগে এই ফোনে মালিক হিসেবে আপনি ভোট দিতে পারবেন।</p>
+      <p className="muted small">অন্য সদস্যদের ভোট আপনার ফোনে আসে শেয়ার্ড Drive সিঙ্কের মাধ্যমে (ব্যাকআপ ট্যাবে Google লগইন চালু থাকলে)।</p>
     </>
   );
 }

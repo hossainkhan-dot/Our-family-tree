@@ -33,7 +33,7 @@ const TABS: { id: Tab; label: string }[] = [
 const STEPS: [boolean, string][] = [
   [true, "ভিত্তি ও GitHub বিল্ড"], [true, "ডিজাইন সিস্টেম"], [true, "ডেটাবেস স্কিমা"],
   [true, "সম্পর্কের লজিক"], [true, "প্রোফাইল ও ফর্ম"], [true, "ট্রি ভিউ"],
-  [false, "লগইন (Google), Role ও অনুমোদন — Role/অনুমোদন/History তৈরি, Google লগইন বাকি"], [true, "ব্যাকআপ ও GEDCOM"],
+  [true, "লগইন (Google), Role ও অনুমোদন"], [true, "ব্যাকআপ, GEDCOM ও Google Drive সিঙ্ক"],
   [false, "মিডিয়া, টাইমলাইন, ম্যাপ, সার্চ"], [false, "Legacy Transfer, Time Capsule, AI"],
 ];
 

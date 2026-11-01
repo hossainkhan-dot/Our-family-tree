@@ -29,3 +29,25 @@ export async function saveOrShareBytes(filename: string, bytes: Uint8Array, mime
   a.download = filename;
   document.body.appendChild(a); a.click(); a.remove();
 }
+
+/** একাধিক ফাইল একসঙ্গে (ভাগ-করা ZIP-এর সব অংশ): ফোনে একটি শেয়ার-শিটে সব ফাইল যায়; ব্রাউজারে একে একে নামে। */
+export async function saveOrShareMany(files: { name: string; data: Uint8Array }[], mime: string): Promise<void> {
+  if (files.length === 1) return saveOrShareBytes(files[0].name, files[0].data, mime);
+  if (Capacitor.isNativePlatform()) {
+    const uris: string[] = [];
+    for (const f of files) {
+      let bin = "";
+      for (let i = 0; i < f.data.length; i += 0x8000) bin += String.fromCharCode(...f.data.subarray(i, i + 0x8000));
+      uris.push((await Filesystem.writeFile({ path: f.name, data: btoa(bin), directory: Directory.Cache })).uri);
+    }
+    await Share.share({ title: files[0].name, files: uris, dialogTitle: `ব্যাকআপের ${files.length}টি ফাইল কোথায় রাখবেন?` });
+    return;
+  }
+  for (const f of files) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([f.data as BlobPart], { type: mime }));
+    a.download = f.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    await new Promise((r) => setTimeout(r, 300));
+  }
+}

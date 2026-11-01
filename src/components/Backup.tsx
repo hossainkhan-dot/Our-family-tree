@@ -6,7 +6,10 @@ import { exportGedcom, importGedcom } from "../db/gedcom";
 import { findDuplicates } from "../core/relations";
 import { addLog, buildPackage, readLog, readPackage } from "../db/package";
 import { loadData } from "../db/repo";
-import { saveOrShare, saveOrShareBytes } from "../db/share";
+import { saveOrShare, saveOrShareMany } from "../db/share";
+import { joinParts, parsePartsManifest, partIndex, splitPackage, type Part } from "../db/split";
+import { loadConfig } from "../cloud/store";
+import CloudPanel from "./CloudPanel";
 import { isZip } from "../db/zip";
 import { useBack } from "../core/back";
 import { listSnapshots, putSnapshot, snapshotBackup, type Snapshot } from "../db/snapshots";
@@ -34,10 +37,12 @@ export default function Backup() {
   };
 
   const exportZip = () => run(async () => {
-    const p = await buildPackage(db);
-    await saveOrShareBytes(p.filename, p.bytes, "application/zip");
-    addLog(db, { at: p.at, kind: "zip", file: p.filename, sha256: p.sha256, people: p.people }); reload();
-    return `ZIP ব্যাকআপ তৈরি হয়েছে (${toBn(p.people)} জন সদস্য)। ফাইলটি Google Drive-এ (যেকোনো অ্যাকাউন্টে), পেনড্রাইভে বা নিরাপদ জায়গায় রাখুন।\nচেকসাম (SHA-256): ${p.sha256}`;
+    const p = await buildPackage(db), cfg = await loadConfig();
+    const sp = await splitPackage(p.filename, p.bytes, Math.round(cfg.partMb * 1024 * 1024), p.at);
+    const out = [...sp.parts, ...(sp.manifestFile ? [sp.manifestFile] : [])];
+    await saveOrShareMany(out, "application/zip");
+    addLog(db, { at: p.at, kind: "zip", file: sp.parts.length > 1 ? `${p.filename} (${sp.parts.length} অংশ)` : p.filename, sha256: p.sha256, people: p.people }); reload();
+    return `ZIP ব্যাকআপ তৈরি হয়েছে (${toBn(p.people)} জন সদস্য${sp.parts.length > 1 ? `, ${toBn(sp.parts.length)}টি অংশে ভাগ করা` : ""})। ফাইল${sp.parts.length > 1 ? "গুলো" : "টি"} Google Drive-এ (যেকোনো অ্যাকাউন্টে), পেনড্রাইভে বা নিরাপদ জায়গায় রাখুন।\nচেকসাম (SHA-256): ${p.sha256}`;
   });
   const exportJson = () => run(async () => {
     const b = exportBackup(db), text = serializeBackup(b);
@@ -51,13 +56,31 @@ export default function Backup() {
     return "GEDCOM ফাইল তৈরি হয়েছে। এটি অন্য যেকোনো বংশবৃক্ষ সফটওয়্যারে খোলা যাবে।";
   });
 
+  const openZip = async (name: string, bytes: Uint8Array, note?: string) => {
+    const r = await readPackage(bytes);
+    setPending({ kind: "restore", b: r.backup, name, note: note ?? `✔ যাচাই সম্পন্ন: ${toBn(r.checked)}টি ফাইলের SHA-256 মিলেছে, কিছু বদলায়নি।` });
+  };
+  /** একাধিক অংশ (.zip.001, .002 ... ও .parts.json) একসঙ্গে বেছে নিলে জোড়া লাগিয়ে যাচাই করে। */
+  const pickParts = (fs: FileList | null) => {
+    if (!fs || !fs.length) return;
+    void run(async () => {
+      const parts: Part[] = []; let manifest = null as ReturnType<typeof parsePartsManifest> | null;
+      for (const f of Array.from(fs)) {
+        const data = new Uint8Array(await f.arrayBuffer());
+        if (/\.parts\.json$/.test(f.name)) manifest = parsePartsManifest(new TextDecoder().decode(data));
+        else if (partIndex(f.name) !== null) parts.push({ name: f.name, data });
+      }
+      const joined = await joinParts(parts, manifest);
+      await openZip(manifest?.base ?? parts[0].name.replace(/\.\d{3}$/, ""), joined);
+      return `${toBn(parts.length)}টি অংশ জোড়া লাগানো ও যাচাই হয়েছে, নিচে নিশ্চিত করুন।`;
+    });
+  };
   const pickFile = (f: File | undefined) => {
     if (!f) return;
     void run(async () => {
       const bytes = new Uint8Array(await f.arrayBuffer());
       if (isZip(bytes)) {
-        const r = await readPackage(bytes);
-        setPending({ kind: "restore", b: r.backup, name: f.name, note: `✔ যাচাই সম্পন্ন: ${toBn(r.checked)}টি ফাইলের SHA-256 মিলেছে, কিছু বদলায়নি।` });
+        await openZip(f.name, bytes);
         return "ZIP ব্যাকআপ যাচাই হয়েছে, নিচে নিশ্চিত করুন।";
       }
       const text = new TextDecoder().decode(bytes);
@@ -106,6 +129,9 @@ export default function Backup() {
       <label className="btn filebtn">ফাইল বেছে নিন (.zip, .json বা .ged)
         <input type="file" accept=".zip,.json,.ged,.gedcom,application/zip,application/json,text/plain" hidden onChange={(e) => { pickFile(e.target.files?.[0]); e.target.value = ""; }} />
       </label>
+      <label className="btn filebtn">ভাগ-করা ZIP-এর সব অংশ একসঙ্গে বেছে নিন
+        <input type="file" multiple hidden onChange={(e) => { pickParts(e.target.files); e.target.value = ""; }} />
+      </label>
       {pending?.kind === "restore" && (
         <div className="card">
           <p><b>{pending.name}</b><br />{toBn(summarize(pending.b).people)} জন সদস্য · {when(pending.b.exported_at)}</p>
@@ -122,11 +148,13 @@ export default function Backup() {
         </div>
       )}
 
+      <CloudPanel onPickBytes={(name, bytes, note) => void run(async () => { await openZip(name, bytes, note); return "ব্যাকআপ যাচাই হয়েছে, নিচে নিশ্চিত করুন।"; })} />
+
       <h2 className="sec">ব্যাকআপের খাতা</h2>
       {readLog(db).length === 0 && <p className="muted small">এখনো কোনো ফাইল-ব্যাকআপ নেওয়া হয়নি।</p>}
       <div className="list">
         {readLog(db).slice(0, 8).map((e, i) => (
-          <div key={i} className="snap"><div><b>{e.kind === "zip" ? "ZIP" : e.kind === "json" ? "JSON" : "GEDCOM"}</b> · {e.file}<br /><span className="muted small">{when(e.at)} · {toBn(e.people)} জন{e.sha256 ? ` · SHA-256: ${e.sha256.slice(0, 12)}…` : ""}</span></div></div>
+          <div key={i} className="snap"><div><b>{({ zip: "ZIP", json: "JSON", ged: "GEDCOM", drive: "Drive", mirror: "Drive (দ্বিতীয়)" } as Record<string, string>)[e.kind] ?? e.kind}</b> · {e.file}<br /><span className="muted small">{when(e.at)} · {toBn(e.people)} জন{e.sha256 ? ` · SHA-256: ${e.sha256.slice(0, 12)}…` : ""}</span></div></div>
         ))}
       </div>
 

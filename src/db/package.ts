@@ -71,7 +71,7 @@ export async function readPackage(bytes: Uint8Array): Promise<ReadPackage> {
   return { backup, manifest: m, checked: m.files.length };
 }
 
-export interface LogEntry { at: string; kind: "zip" | "json" | "ged"; file: string; sha256?: string; people: number }
+export interface LogEntry { at: string; kind: "zip" | "json" | "ged" | "drive" | "mirror"; file: string; sha256?: string; people: number }
 export function readLog(db: Sql): LogEntry[] {
   try { const v = JSON.parse(getMeta(db, "backup_log") ?? "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
 }
