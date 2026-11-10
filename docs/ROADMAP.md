@@ -23,6 +23,7 @@ Rule: কোড পাবলিক হতে পারে, আসল পার�
   - [x] ৯ক – সার্চ (নাম/পেশা/লেখা/স্থান/ঘটনা, বাংলা-ইংরেজি), টাইমলাইন (অজানা তারিখ শেষে, অনুমান নয়) ও ঘটনা যোগ, অফলাইন মানচিত্র (স্থানাঙ্ক-বিন্দু), ড্যাশবোর্ড (সংখ্যা, তথ্যের মান, ঘাটতি); আরও > অন্বেষণ; src/db/explore.ts, components/Explore.tsx; tests/explore.test.ts পাস
   - [x] ৯খ – ছবি/ডকুমেন্ট (প্রোফাইলে যোগ, SHA-256, ডুপ্লিকেট রোধ, ২৫ MB সীমা); ব্যাকআপ ZIP-এ media/ ও Drive সিঙ্কে Photos/; src/db/media.ts; tests/media.test.ts পাস
   - সীমা: মানচিত্রে পটভূমি ম্যাপ নেই (অফলাইন); ছবির থাম্বনেইল আলাদা বানানো হয় না; ভিডিও/অডিও ধরা হয়, তবে ২৫ MB সীমায়
+- [x] গেমিং ভয়েস – Voice Pack, ভাসমান বাটন, গেমের ওপর প্যানেল (আরও > গেমিং ভয়েস; native/android/, scripts/patch-android.mjs, docs/GAMING_VOICE.md; tests/voicepack.test.ts পাস; বাস্তব ফোনে পরীক্ষা বাকি)
 - [ ] ধাপ ১০ – Legacy Transfer, Time Capsule, Knowledge AI, Cinematic View
 
 অগ্রগতি: ৯/১০ (ধাপ ১-৯ সম্পন্ন; ১০ বাকি। ৭খ/৮খ-র Picker ও বাস্তব Google পরীক্ষা বাকি)
