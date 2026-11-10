@@ -4,9 +4,8 @@ import * as A from "../db/access";
 import { useDb } from "../db/DbContext";
 import { explainError } from "../db/repo";
 import Explore from "./Explore";
-import VoicePacks from "./VoicePacks";
 
-type Sec = "explore" | "members" | "approvals" | "history" | "voice" | "progress";
+type Sec = "explore" | "members" | "approvals" | "history" | "progress";
 const when = (iso: string) => new Date(iso).toLocaleString("bn-BD", { dateStyle: "medium", timeStyle: "short" });
 const REQ_BN: Record<string, string> = { applied: "প্রয়োগ হয়েছে", rejected: "প্রত্যাখ্যাত", failed: "প্রয়োগ হয়নি", cancelled: "বাতিল" };
 
@@ -25,7 +24,7 @@ export default function Manage({ progress, onOpenProfile }: { progress: ReactNod
     <section className="panel">
       <h1>আরও</h1>
       <div className="chips" role="tablist">
-        {([["explore", "অন্বেষণ"], ["members", "সদস্য ও Role"], ["approvals", "অনুমোদন"], ["history", "History"], ["voice", "গেমিং ভয়েস"], ["progress", "অগ্রগতি"]] as [Sec, string][]).map(([k, l]) => (
+        {([["explore", "অন্বেষণ"], ["members", "সদস্য ও Role"], ["approvals", "অনুমোদন"], ["history", "History"], ["progress", "অগ্রগতি"]] as [Sec, string][]).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={sec === k} className={sec === k ? "on" : ""} onClick={() => { setSec(k); setMsg(null); }}>{l}</button>
         ))}
       </div>
@@ -34,7 +33,6 @@ export default function Manage({ progress, onOpenProfile }: { progress: ReactNod
       {sec === "members" && <Members me={me} act={act} />}
       {sec === "approvals" && <Approvals me={me} act={act} />}
       {sec === "history" && <History />}
-      {sec === "voice" && <VoicePacks />}
       {sec === "progress" && progress}
     </section>
   );

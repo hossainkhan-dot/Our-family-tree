@@ -12,8 +12,6 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npx cap add android
-      - name: Gaming Voice native code (overlay, audio, plugin)
-        run: node scripts/patch-android.mjs
       - name: Set version (increases every build so updates install over the old app)
         run: sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.${{ github.run_number }}\"/" android/app/build.gradle
       - run: npx cap sync android
